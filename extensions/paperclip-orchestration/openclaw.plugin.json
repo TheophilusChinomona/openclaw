@@ -1,0 +1,66 @@
+{
+  "id": "paperclip-orchestration",
+  "enabledByDefault": false,
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "paperclip": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "description": "Enable Paperclip orchestration integration"
+          },
+          "apiEndpoint": {
+            "type": "string",
+            "description": "Paperclip API base URL (default: http://localhost:3100)"
+          },
+          "apiKey": {
+            "type": "string",
+            "description": "Paperclip board API key for server-side calls (generate in Paperclip instance settings)"
+          },
+          "taskContextInjection": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "enabled": {
+                "type": "boolean",
+                "description": "Inject Paperclip task context into agent system prompts"
+              },
+              "mode": {
+                "type": "string",
+                "enum": ["prepend", "append"],
+                "description": "Where to place the task context in the system prompt"
+              }
+            }
+          },
+          "inboundBridge": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "enabled": {
+                "type": "boolean",
+                "description": "Create Paperclip tasks from inbound channel messages"
+              },
+              "companyId": {
+                "type": "string",
+                "description": "Paperclip company ID to create tasks under"
+              },
+              "defaultAssigneeAgentId": {
+                "type": "string",
+                "description": "Agent ID to assign inbound tasks to (defaults to CEO agent)"
+              },
+              "channels": {
+                "type": "array",
+                "items": { "type": "string" },
+                "description": "Channel IDs to bridge (empty = all channels)"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

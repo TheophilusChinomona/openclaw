@@ -1,0 +1,18 @@
+{
+  "name": "@openclaw/paperclip-orchestration",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Native Paperclip orchestration layer integration for OpenClaw",
+  "type": "module",
+  "devDependencies": {
+    "openclaw": "workspace:*"
+  },
+  "peerDependencies": {
+    "openclaw": ">=2026.3.29"
+  },
+  "openclaw": {
+    "extensions": [
+      "./index.ts"
+    ]
+  }
+}
