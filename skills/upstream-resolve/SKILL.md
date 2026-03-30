@@ -56,13 +56,33 @@ echo "$CONFLICTS"
 
 Categorise each file:
 - Is it under one of the `CUSTOM_PATHS`? → **custom** (needs careful review)
+- Is it under a pruned extension directory? → **pruned** (auto-delete, keep our deletion)
 - Everything else → **upstream** (safe to accept theirs)
+
+## Step 3b — Handle pruned extensions (OpenClaw only)
+
+If `REPO` is `openclaw` and `PRUNED_EXTENSIONS.md` exists at the repo root, read it to get the list of pruned extension names. For any conflicted file whose path starts with `extensions/<pruned-name>/`, this is a "deleted by us, modified by them" conflict — we intentionally removed that extension.
+
+```bash
+if [ "$REPO" = "openclaw" ] && [ -f PRUNED_EXTENSIONS.md ]; then
+  # Extract pruned extension names from the ## Removed section
+  PRUNED=$(sed -n '/^## Removed/,/^## /p' PRUNED_EXTENSIONS.md | grep -v '^#' | tr ',' '\n' | sed 's/^ *//;s/ *$//' | grep -v '^$')
+  for EXT in $PRUNED; do
+    # Remove any conflicting files in pruned extension dirs
+    PRUNED_FILES=$(echo "$CONFLICTS" | grep "^extensions/$EXT/" || true)
+    if [ -n "$PRUNED_FILES" ]; then
+      echo "$PRUNED_FILES" | xargs git rm -rf --ignore-unmatch
+      echo "🗑️  Auto-deleted pruned extension files: extensions/$EXT/"
+    fi
+  done
+fi
+```
 
 Show the user a clear table: file | category | action.
 
 ## Step 4 — Resolve non-custom files automatically
 
-For each **upstream** file:
+For each **upstream** file (not custom and not already handled as pruned):
 
 ```bash
 git checkout --theirs -- <file>
