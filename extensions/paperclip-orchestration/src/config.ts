@@ -19,10 +19,24 @@ export function getPaperclipConfig(config: any): PaperclipOrchestrationConfig | 
   const raw = config?.paperclip;
   if (!raw?.enabled) return null;
 
+  // API key and endpoint can come from config OR environment variables.
+  // This lets Docker deployments avoid putting secrets in the mounted config file:
+  //   PAPERCLIP_BOARD_API_KEY — board API key for server-side calls
+  //   PAPERCLIP_API_ENDPOINT  — override endpoint (e.g. for non-default ports)
+  const apiKey =
+    (raw.apiKey as string | undefined) ??
+    process.env.PAPERCLIP_BOARD_API_KEY ??
+    undefined;
+
+  const apiEndpoint =
+    (raw.apiEndpoint as string | undefined) ??
+    process.env.PAPERCLIP_API_ENDPOINT ??
+    "http://localhost:3100";
+
   return {
     enabled: true,
-    apiEndpoint: (raw.apiEndpoint as string | undefined) ?? "http://localhost:3100",
-    apiKey: raw.apiKey as string | undefined,
+    apiEndpoint,
+    apiKey,
     taskContextInjection: {
       enabled: (raw.taskContextInjection?.enabled as boolean | undefined) ?? true,
       mode: (raw.taskContextInjection?.mode as "prepend" | "append" | undefined) ?? "prepend",
