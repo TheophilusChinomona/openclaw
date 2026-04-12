@@ -3,13 +3,25 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    # Port 18789 is NOT exposed to the internet.
-    # Next.js communicates via the internal dokploy-network.
-    expose:
-      - "18789"
+      # Build WITHOUT channel extensions (telegram, whatsapp, discord, etc.)
+      # CaptureIQ only needs the Claude API gateway — no messaging integrations.
+      # This keeps the image lean and avoids jiti TypeScript compilation on startup.
+      args:
+        OPENCLAW_EXTENSIONS: ""
+    # network_mode: host — OpenClaw binds to loopback (127.0.0.1) only.
+    # A socat proxy on the host bridges 172.17.0.1:18790 → 127.0.0.1:18790,
+    # so Next.js reaches the gateway via extra_hosts: openclaw-gateway:host-gateway.
+    # Port is NOT exposed to the internet (host firewall + no public routing).
+    network_mode: host
     volumes:
       - openclaw-data:/home/node/.openclaw
-      - openclaw-workspace:/home/node/.openclaw/workspace
+      # Bind-mount versioned workspace files from git repo into container.
+      # Contains SOUL.md, AGENTS.md, TOOLS.md, HEARTBEAT.md.
+      # On Dokploy: deploy path must be cloned so ./workspace/ exists.
+      - ./workspace:/home/node/.openclaw/workspace
+      # Persist jiti TypeScript cache across restarts.
+      # Without this, all extension TS files are recompiled on every container restart.
+      - openclaw-jiti-cache:/tmp/jiti
     environment:
       HOME: /home/node
       TERM: xterm-256color
@@ -29,27 +41,22 @@ services:
         "--bind",
         "lan",
         "--port",
-        "18789",
+        "18790",
       ]
-    networks:
-      - dokploy-network
     healthcheck:
       test:
         [
           "CMD",
           "node",
           "-e",
-          "fetch('http://127.0.0.1:18789/healthz').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+          "fetch('http://127.0.0.1:18790/healthz').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
         ]
       interval: 30s
       timeout: 5s
       retries: 5
-      start_period: 30s
+      # Increase start_period to allow jiti compilation on first run
+      start_period: 120s
 
 volumes:
   openclaw-data:
-  openclaw-workspace:
-
-networks:
-  dokploy-network:
-    external: true
+  openclaw-jiti-cache:
