@@ -4,7 +4,7 @@ import type {
   ChannelMessagingAdapter,
   ChannelOutboundAdapter,
   ChannelPlugin,
-} from "../channels/plugins/types.js";
+} from "../channels/plugins/types.public.js";
 import type { PluginRegistry } from "../plugins/registry.js";
 
 export type TestChannelRegistration = {
@@ -32,12 +32,23 @@ export const createTestRegistry = (channels: TestChannelRegistration[] = []): Pl
   mediaUnderstandingProviders: [],
   imageGenerationProviders: [],
   videoGenerationProviders: [],
+  musicGenerationProviders: [],
   webFetchProviders: [],
   webSearchProviders: [],
+  codexAppServerExtensionFactories: [],
+  agentToolResultMiddlewares: [],
+  memoryEmbeddingProviders: [],
+  textTransforms: [],
+  agentHarnesses: [],
   gatewayHandlers: {},
+  gatewayMethodScopes: {},
   httpRoutes: [],
   cliRegistrars: [],
+  reloads: [],
+  nodeHostCommands: [],
+  securityAuditCollectors: [],
   services: [],
+  gatewayDiscoveryServices: [],
   commands: [],
   conversationBindingResolvedHandlers: [],
   diagnostics: [],

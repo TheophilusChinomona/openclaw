@@ -31,12 +31,17 @@ export function makeAttemptResult(
 ): EmbeddedRunAttemptResult {
   const toolMetas = overrides.toolMetas ?? [];
   const didSendViaMessagingTool = overrides.didSendViaMessagingTool ?? false;
+  const messagingToolSentTexts = overrides.messagingToolSentTexts ?? [];
+  const messagingToolSentMediaUrls = overrides.messagingToolSentMediaUrls ?? [];
   const successfulCronAdds = overrides.successfulCronAdds;
   return {
     aborted: false,
+    externalAbort: false,
     timedOut: false,
+    idleTimedOut: false,
     timedOutDuringCompaction: false,
     promptError: null,
+    promptErrorSource: null,
     sessionIdUsed: "test-session",
     assistantTexts: ["Hello!"],
     toolMetas,
@@ -47,11 +52,18 @@ export function makeAttemptResult(
       buildAttemptReplayMetadata({
         toolMetas,
         didSendViaMessagingTool,
+        messagingToolSentTexts,
+        messagingToolSentMediaUrls,
         successfulCronAdds,
       }),
+    itemLifecycle: {
+      startedCount: 0,
+      completedCount: 0,
+      activeCount: 0,
+    },
     didSendViaMessagingTool,
-    messagingToolSentTexts: [],
-    messagingToolSentMediaUrls: [],
+    messagingToolSentTexts,
+    messagingToolSentMediaUrls,
     messagingToolSentTargets: [],
     cloudCodeAssistFormatError: false,
     ...overrides,
@@ -107,8 +119,8 @@ export function queueOverflowAttemptWithOversizedToolOutput(
       promptError: overflowError,
       messagesSnapshot: [
         {
-          role: "assistant",
-          content: "big tool output",
+          role: "toolResult",
+          content: [{ type: "text", text: "x".repeat(80_000) }],
         } as unknown as EmbeddedRunAttemptResult["messagesSnapshot"][number],
       ],
     }),
