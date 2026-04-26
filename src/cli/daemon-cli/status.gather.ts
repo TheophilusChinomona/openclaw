@@ -15,11 +15,7 @@ import type { FindExtraGatewayServicesOptions } from "../../daemon/inspect.js";
 import type { ServiceConfigAudit } from "../../daemon/service-audit.js";
 import type { GatewayServiceRuntime } from "../../daemon/service-runtime.js";
 import { resolveGatewayService } from "../../daemon/service.js";
-import {
-  isGatewaySecretRefUnavailableError,
-  resolveGatewayProbeCredentialsFromConfig,
-  trimToUndefined,
-} from "../../gateway/credentials.js";
+import { trimToUndefined } from "../../gateway/credentials.js";
 import {
   inspectBestEffortPrimaryTailnetIPv4,
   resolveBestEffortGatewayBindHostForDisplay,
@@ -47,6 +43,7 @@ type GatewayStatusSummary = {
   bindMode: GatewayBindMode;
   bindHost: string;
   customBindHost?: string;
+  tlsEnabled?: boolean;
   port: number;
   portSource: "service args" | "env/config";
   probeUrl: string;
@@ -169,6 +166,13 @@ export type DaemonStatus = {
   lastError?: string;
   rpc?: {
     ok: boolean;
+    kind?: "connect" | "read";
+    capability?: string;
+    auth?: {
+      role?: string | null;
+      scopes?: string[];
+      capability?: string;
+    };
     error?: string;
     url?: string;
     authWarning?: string;
@@ -190,10 +194,6 @@ function shouldReportPortUsage(status: PortUsageStatus | undefined, rpcOk?: bool
   return true;
 }
 
-function parseGatewaySecretRefPathFromError(error: unknown): string | null {
-  return isGatewaySecretRefUnavailableError(error) ? error.path : null;
-}
-
 async function loadDaemonConfigContext(
   serviceEnv?: Record<string, string>,
 ): Promise<DaemonConfigContext> {
@@ -208,13 +208,18 @@ async function loadDaemonConfigContext(
     resolveStateDir(mergedDaemonEnv as NodeJS.ProcessEnv),
   );
 
-  const cliIO = createConfigIO({ env: process.env, configPath: cliConfigPath });
+  const cliIO = createConfigIO({
+    env: process.env,
+    configPath: cliConfigPath,
+    pluginValidation: "skip",
+  });
   const sharesDaemonConfigContext = !serviceEnv && cliConfigPath === daemonConfigPath;
   const daemonIO = sharesDaemonConfigContext
     ? cliIO
     : createConfigIO({
         env: mergedDaemonEnv,
         configPath: daemonConfigPath,
+        pluginValidation: "skip",
       });
 
   const cliSnapshotPromise = cliIO.readConfigFileSnapshot().catch(() => null);
@@ -280,7 +285,8 @@ async function resolveGatewayStatusSummary(params: {
   });
   const probeHost = pickProbeHostForBind(bindMode, tailnetIPv4, customBindHost);
   const probeUrlOverride = trimToUndefined(params.rpcUrlOverride) ?? null;
-  const scheme = params.daemonCfg.gateway?.tls?.enabled === true ? "wss" : "ws";
+  const tlsEnabled = params.daemonCfg.gateway?.tls?.enabled === true;
+  const scheme = tlsEnabled ? "wss" : "ws";
   const probeUrl = probeUrlOverride ?? `${scheme}://${probeHost}:${daemonPort}`;
   let probeNote =
     !probeUrlOverride && bindMode === "lan"
@@ -296,6 +302,7 @@ async function resolveGatewayStatusSummary(params: {
       bindMode,
       bindHost,
       customBindHost,
+      ...(tlsEnabled ? { tlsEnabled } : {}),
       port: daemonPort,
       portSource,
       probeUrl,
@@ -408,43 +415,20 @@ export async function gatherDaemonStatus(
   let rpcAuthWarning: string | undefined;
   if (opts.probe) {
     const probeMode = daemonCfg.gateway?.mode === "remote" ? "remote" : "local";
-    try {
-      daemonProbeAuth = resolveGatewayProbeCredentialsFromConfig({
-        cfg: daemonCfg,
-        mode: probeMode,
-        env: mergedDaemonEnv as NodeJS.ProcessEnv,
-        explicitAuth: {
-          token: opts.rpc.token,
-          password: opts.rpc.password,
-        },
-      });
-    } catch (error) {
-      const refPath = parseGatewaySecretRefPathFromError(error);
-      if (!refPath) {
-        throw error;
-      }
-      try {
-        daemonProbeAuth = await loadGatewayProbeAuthModule().then(
-          ({ resolveGatewayProbeAuthWithSecretInputs }) =>
-            resolveGatewayProbeAuthWithSecretInputs({
-              cfg: daemonCfg,
-              mode: probeMode,
-              env: mergedDaemonEnv as NodeJS.ProcessEnv,
-              explicitAuth: {
-                token: opts.rpc.token,
-                password: opts.rpc.password,
-              },
-            }),
-        );
-      } catch (fallbackError) {
-        const fallbackRefPath = parseGatewaySecretRefPathFromError(fallbackError);
-        if (!fallbackRefPath) {
-          throw fallbackError;
-        }
-        daemonProbeAuth = undefined;
-        rpcAuthWarning = `${fallbackRefPath} SecretRef is unavailable in this command path; probing without configured auth credentials.`;
-      }
-    }
+    const probeAuthResolution = await loadGatewayProbeAuthModule().then(
+      ({ resolveGatewayProbeAuthSafeWithSecretInputs }) =>
+        resolveGatewayProbeAuthSafeWithSecretInputs({
+          cfg: daemonCfg,
+          mode: probeMode,
+          env: mergedDaemonEnv as NodeJS.ProcessEnv,
+          explicitAuth: {
+            token: opts.rpc.token,
+            password: opts.rpc.password,
+          },
+        }),
+    );
+    daemonProbeAuth = probeAuthResolution.auth;
+    rpcAuthWarning = probeAuthResolution.warning;
   }
 
   const rpc = opts.probe
@@ -468,7 +452,7 @@ export async function gatherDaemonStatus(
     rpcAuthWarning = undefined;
   }
   const health =
-    opts.probe && loaded
+    opts.probe && loaded && rpc?.ok !== true
       ? await loadRestartHealthModule()
           .then(({ inspectGatewayRestart }) =>
             inspectGatewayRestart({

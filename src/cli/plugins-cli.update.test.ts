@@ -3,14 +3,17 @@ import { beforeEach, describe, expect, it } from "vitest";
 import type { OpenClawConfig } from "../config/config.js";
 import {
   loadConfig,
+  refreshPluginRegistry,
   registerPluginsCli,
   resetPluginsCliTestState,
   runPluginsCommand,
   runtimeErrors,
   runtimeLogs,
+  setInstalledPluginIndexInstallRecords,
   updateNpmInstalledHookPacks,
   updateNpmInstalledPlugins,
   writeConfigFile,
+  writePersistedInstalledPluginIndexInstallRecords,
 } from "./plugins-cli-test-helpers.js";
 
 function createTrackedPluginConfig(params: {
@@ -106,6 +109,7 @@ describe("plugins cli update", () => {
       }),
     );
     expect(writeConfigFile).toHaveBeenCalledWith(nextConfig);
+    expect(refreshPluginRegistry).not.toHaveBeenCalled();
     expect(
       runtimeLogs.some((line) => line.includes("Restart the gateway to load plugins and hooks.")),
     ).toBe(true);
@@ -138,111 +142,13 @@ describe("plugins cli update", () => {
     expect(runtimeLogs.at(-1)).toBe("No tracked plugins or hook packs to update.");
   });
 
-  it("maps an explicit unscoped npm dist-tag update to the tracked plugin id", async () => {
-    const config = {
-      plugins: {
-        installs: {
-          "openclaw-codex-app-server": {
-            source: "npm",
-            spec: "openclaw-codex-app-server",
-            installPath: "/tmp/openclaw-codex-app-server",
-            resolvedName: "openclaw-codex-app-server",
-          },
-        },
-      },
-    } as OpenClawConfig;
-    loadConfig.mockReturnValue(config);
-    updateNpmInstalledPlugins.mockResolvedValue({
-      config,
-      changed: false,
-      outcomes: [],
-    });
-
-    await runPluginsCommand(["plugins", "update", "openclaw-codex-app-server@beta"]);
-
-    expect(updateNpmInstalledPlugins).toHaveBeenCalledWith(
-      expect.objectContaining({
-        config,
-        pluginIds: ["openclaw-codex-app-server"],
-        specOverrides: {
-          "openclaw-codex-app-server": "openclaw-codex-app-server@beta",
-        },
-      }),
-    );
-  });
-
-  it("maps an explicit scoped npm dist-tag update to the tracked plugin id", async () => {
-    const config = {
-      plugins: {
-        installs: {
-          "voice-call": {
-            source: "npm",
-            spec: "@openclaw/voice-call",
-            installPath: "/tmp/voice-call",
-            resolvedName: "@openclaw/voice-call",
-          },
-        },
-      },
-    } as OpenClawConfig;
-    loadConfig.mockReturnValue(config);
-    updateNpmInstalledPlugins.mockResolvedValue({
-      config,
-      changed: false,
-      outcomes: [],
-    });
-
-    await runPluginsCommand(["plugins", "update", "@openclaw/voice-call@beta"]);
-
-    expect(updateNpmInstalledPlugins).toHaveBeenCalledWith(
-      expect.objectContaining({
-        config,
-        pluginIds: ["voice-call"],
-        specOverrides: {
-          "voice-call": "@openclaw/voice-call@beta",
-        },
-      }),
-    );
-  });
-
-  it("maps an explicit npm version update to the tracked plugin id", async () => {
-    const config = {
-      plugins: {
-        installs: {
-          "openclaw-codex-app-server": {
-            source: "npm",
-            spec: "openclaw-codex-app-server",
-            installPath: "/tmp/openclaw-codex-app-server",
-            resolvedName: "openclaw-codex-app-server",
-          },
-        },
-      },
-    } as OpenClawConfig;
-    loadConfig.mockReturnValue(config);
-    updateNpmInstalledPlugins.mockResolvedValue({
-      config,
-      changed: false,
-      outcomes: [],
-    });
-
-    await runPluginsCommand(["plugins", "update", "openclaw-codex-app-server@0.2.0-beta.4"]);
-
-    expect(updateNpmInstalledPlugins).toHaveBeenCalledWith(
-      expect.objectContaining({
-        config,
-        pluginIds: ["openclaw-codex-app-server"],
-        specOverrides: {
-          "openclaw-codex-app-server": "openclaw-codex-app-server@0.2.0-beta.4",
-        },
-      }),
-    );
-  });
-
   it("passes dangerous force unsafe install to plugin updates", async () => {
     const config = createTrackedPluginConfig({
       pluginId: "openclaw-codex-app-server",
       spec: "openclaw-codex-app-server@beta",
     });
     loadConfig.mockReturnValue(config);
+    setInstalledPluginIndexInstallRecords(config.plugins?.installs ?? {});
     updateNpmInstalledPlugins.mockResolvedValue({
       config,
       changed: false,
@@ -261,41 +167,6 @@ describe("plugins cli update", () => {
         config,
         pluginIds: ["openclaw-codex-app-server"],
         dangerouslyForceUnsafeInstall: true,
-      }),
-    );
-  });
-
-  it("keeps using the recorded npm tag when update is invoked by plugin id", async () => {
-    const config = {
-      plugins: {
-        installs: {
-          "openclaw-codex-app-server": {
-            source: "npm",
-            spec: "openclaw-codex-app-server@beta",
-            installPath: "/tmp/openclaw-codex-app-server",
-            resolvedName: "openclaw-codex-app-server",
-          },
-        },
-      },
-    } as OpenClawConfig;
-    loadConfig.mockReturnValue(config);
-    updateNpmInstalledPlugins.mockResolvedValue({
-      config,
-      changed: false,
-      outcomes: [],
-    });
-
-    await runPluginsCommand(["plugins", "update", "openclaw-codex-app-server"]);
-
-    expect(updateNpmInstalledPlugins).toHaveBeenCalledWith(
-      expect.objectContaining({
-        config,
-        pluginIds: ["openclaw-codex-app-server"],
-      }),
-    );
-    expect(updateNpmInstalledPlugins).not.toHaveBeenCalledWith(
-      expect.objectContaining({
-        specOverrides: expect.anything(),
       }),
     );
   });
@@ -322,6 +193,7 @@ describe("plugins cli update", () => {
       },
     } as OpenClawConfig;
     loadConfig.mockReturnValue(cfg);
+    setInstalledPluginIndexInstallRecords(cfg.plugins?.installs ?? {});
     updateNpmInstalledPlugins.mockResolvedValue({
       outcomes: [{ status: "ok", message: "Updated alpha -> 1.1.0" }],
       changed: true,
@@ -342,7 +214,15 @@ describe("plugins cli update", () => {
         dryRun: false,
       }),
     );
-    expect(writeConfigFile).toHaveBeenCalledWith(nextConfig);
+    expect(writePersistedInstalledPluginIndexInstallRecords).toHaveBeenCalledWith(
+      nextConfig.plugins?.installs,
+    );
+    expect(writeConfigFile).toHaveBeenCalledWith({});
+    expect(refreshPluginRegistry).toHaveBeenCalledWith({
+      config: {},
+      installRecords: nextConfig.plugins?.installs,
+      reason: "source-changed",
+    });
     expect(
       runtimeLogs.some((line) => line.includes("Restart the gateway to load plugins and hooks.")),
     ).toBe(true);

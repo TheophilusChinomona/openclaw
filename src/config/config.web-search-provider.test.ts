@@ -1,5 +1,7 @@
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { __testing as webSearchTesting } from "../agents/tools/web-search.js";
 import { buildWebSearchProviderConfig } from "./test-helpers.js";
+import { validateConfigObjectWithPlugins } from "./validation.js";
 
 vi.mock("../runtime.js", () => ({
   defaultRuntime: { log: vi.fn(), error: vi.fn() },
@@ -10,6 +12,10 @@ vi.mock("../plugin-sdk/telegram-command-config.js", () => ({
   normalizeTelegramCommandName: (value: string) => value.trim().toLowerCase(),
   normalizeTelegramCommandDescription: (value: string) => value.trim(),
   resolveTelegramCustomCommands: () => ({ commands: [], issues: [] }),
+}));
+
+vi.mock("../plugins/manifest-command-aliases.runtime.js", () => ({
+  resolveManifestCommandAliasOwner: () => undefined,
 }));
 
 const getScopedWebSearchCredential = (key: string) => (search?: Record<string, unknown>) =>
@@ -221,16 +227,7 @@ vi.mock("../plugins/manifest-registry.js", () => {
   };
 });
 
-let validateConfigObjectWithPlugins: typeof import("./config.js").validateConfigObjectWithPlugins;
-let resolveSearchProvider: typeof import("../agents/tools/web-search.js").__testing.resolveSearchProvider;
-
-beforeAll(async () => {
-  vi.resetModules();
-  ({ validateConfigObjectWithPlugins } = await import("./config.js"));
-  ({
-    __testing: { resolveSearchProvider },
-  } = await import("../agents/tools/web-search.js"));
-});
+const { resolveSearchProvider } = webSearchTesting;
 
 describe("web search provider config", () => {
   it("does not warn for brave plugin config when bundled web search allowlist compat applies", () => {
@@ -389,7 +386,7 @@ describe("web search provider config", () => {
     expect(res.ok).toBe(false);
   });
 
-  it("accepts legacy scoped provider config for bundled providers via auto-migration", () => {
+  it("detects legacy scoped provider config for bundled providers", () => {
     const res = validateConfigObjectWithPlugins({
       tools: {
         web: {
@@ -403,21 +400,7 @@ describe("web search provider config", () => {
       },
     });
 
-    expect(res.ok).toBe(true);
-    if (!res.ok) {
-      return;
-    }
-    expect(res.config.tools?.web?.search).toEqual({
-      provider: "gemini",
-    });
-    expect(res.config.plugins?.entries?.google).toEqual({
-      enabled: true,
-      config: {
-        webSearch: {
-          apiKey: "legacy-key",
-        },
-      },
-    });
+    expect(res.ok).toBe(false);
   });
 
   it("accepts gemini provider with no extra config", () => {

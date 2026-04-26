@@ -5,6 +5,7 @@ import {
   clearPluginManifestRegistryCache,
   type PluginManifestRegistry,
 } from "../plugins/manifest-registry.js";
+import { clearPluginSetupRegistryCache } from "../plugins/setup-registry.js";
 import {
   cleanupTrackedTempDirs,
   makeTrackedTempDir,
@@ -16,6 +17,7 @@ const tempDirs: string[] = [];
 export function resetPluginAutoEnableTestState(): void {
   clearPluginDiscoveryCache();
   clearPluginManifestRegistryCache();
+  clearPluginSetupRegistryCache();
   cleanupTrackedTempDirs(tempDirs);
 }
 
@@ -57,10 +59,13 @@ export function makeRegistry(
   plugins: Array<{
     id: string;
     channels: string[];
+    activation?: { onAgentHarnesses?: string[] };
     autoEnableWhenConfiguredProviders?: string[];
     modelSupport?: { modelPrefixes?: string[]; modelPatterns?: string[] };
-    contracts?: { webSearchProviders?: string[]; webFetchProviders?: string[] };
+    contracts?: { webSearchProviders?: string[]; webFetchProviders?: string[]; tools?: string[] };
     providers?: string[];
+    cliBackends?: string[];
+    configSchema?: Record<string, unknown>;
     channelConfigs?: Record<string, { schema: Record<string, unknown>; preferOver?: string[] }>;
   }>,
 ): PluginManifestRegistry {
@@ -68,12 +73,14 @@ export function makeRegistry(
     plugins: plugins.map((plugin) => ({
       id: plugin.id,
       channels: plugin.channels,
+      activation: plugin.activation,
       autoEnableWhenConfiguredProviders: plugin.autoEnableWhenConfiguredProviders,
       modelSupport: plugin.modelSupport,
       contracts: plugin.contracts,
+      configSchema: plugin.configSchema,
       channelConfigs: plugin.channelConfigs,
       providers: plugin.providers ?? [],
-      cliBackends: [],
+      cliBackends: plugin.cliBackends ?? [],
       skills: [],
       hooks: [],
       origin: "config" as const,

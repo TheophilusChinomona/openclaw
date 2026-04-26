@@ -3,11 +3,9 @@ summary: "Complete reference for CLI setup flow, auth/model setup, outputs, and 
 read_when:
   - You need detailed behavior for openclaw onboard
   - You are debugging onboarding results or integrating onboarding clients
-title: "CLI Setup Reference"
+title: "CLI setup reference"
 sidebarTitle: "CLI reference"
 ---
-
-# CLI Setup Reference
 
 This page is the full reference for `openclaw onboard`.
 For the short guide, see [Onboarding (CLI)](/start/wizard).
@@ -129,36 +127,22 @@ What you set:
   <Accordion title="Anthropic API key">
     Uses `ANTHROPIC_API_KEY` if present or prompts for a key, then saves it for daemon use.
   </Accordion>
-  <Accordion title="Anthropic Claude CLI">
-    Reuses a local Claude CLI login on the gateway host and switches model
-    selection to a canonical `claude-cli/claude-*` ref.
-
-    This is an available local fallback path in `openclaw onboard` and
-    `openclaw configure`. For production, prefer an Anthropic API key.
-
-    - macOS: checks Keychain item "Claude Code-credentials"
-    - Linux and Windows: reuses `~/.claude/.credentials.json` if present
-
-    On macOS, choose "Always Allow" so launchd starts do not block.
-
-  </Accordion>
-  <Accordion title="OpenAI Code subscription (Codex CLI reuse)">
-    If `~/.codex/auth.json` exists, the wizard can reuse it.
-    Reused Codex CLI credentials stay managed by Codex CLI; on expiry OpenClaw
-    re-reads that source first and, when the provider can refresh it, writes
-    the refreshed credential back to Codex storage instead of taking ownership
-    itself.
-  </Accordion>
   <Accordion title="OpenAI Code subscription (OAuth)">
     Browser flow; paste `code#state`.
 
-    Sets `agents.defaults.model` to `openai-codex/gpt-5.4` when model is unset or `openai/*`.
+    Sets `agents.defaults.model` to `openai-codex/gpt-5.5` when model is unset or already OpenAI-family.
+
+  </Accordion>
+  <Accordion title="OpenAI Code subscription (device pairing)">
+    Browser pairing flow with a short-lived device code.
+
+    Sets `agents.defaults.model` to `openai-codex/gpt-5.5` when model is unset or already OpenAI-family.
 
   </Accordion>
   <Accordion title="OpenAI API key">
     Uses `OPENAI_API_KEY` if present or prompts for a key, then stores the credential in auth profiles.
 
-    Sets `agents.defaults.model` to `openai/gpt-5.4` when model is unset, `openai/*`, or `openai-codex/*`.
+    Sets `agents.defaults.model` to `openai/gpt-5.5` when model is unset, `openai/*`, or `openai-codex/*`.
 
   </Accordion>
   <Accordion title="xAI (Grok) API key">
@@ -194,8 +178,10 @@ What you set:
     More detail: [Synthetic](/providers/synthetic).
   </Accordion>
   <Accordion title="Ollama (Cloud and local open models)">
-    Prompts for base URL (default `http://127.0.0.1:11434`), then offers Cloud + Local or Local mode.
-    Discovers available models and suggests defaults.
+    Prompts for `Cloud + Local`, `Cloud only`, or `Local only` first.
+    `Cloud only` uses `OLLAMA_API_KEY` with `https://ollama.com`.
+    The host-backed modes prompt for base URL (default `http://127.0.0.1:11434`), discover available models, and suggest defaults.
+    `Cloud + Local` also checks whether that Ollama host is signed in for cloud access.
     More detail: [Ollama](/providers/ollama).
   </Accordion>
   <Accordion title="Moonshot and Kimi Coding">
@@ -274,6 +260,7 @@ is only a legacy import source.
 Typical fields in `~/.openclaw/openclaw.json`:
 
 - `agents.defaults.workspace`
+- `agents.defaults.skipBootstrap` when `--skip-bootstrap` is passed
 - `agents.defaults.model` / `models.providers` (if Minimax chosen)
 - `tools.profile` (local onboarding defaults to `"coding"` when unset; existing explicit values are preserved)
 - `gateway.*` (mode, bind, auth, tailscale)
