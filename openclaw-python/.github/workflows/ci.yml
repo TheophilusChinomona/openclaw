@@ -40,10 +40,17 @@ jobs:
         working-directory: openclaw-python
         run: mypy src/
 
-      - name: Tests (unit)
+      - name: Unit tests
         working-directory: openclaw-python
-        run: pytest tests/ -v --tb=short --cov=src/openclaw --cov-report=term-missing
+        run: >
+          pytest tests/ -v --tb=short
           --ignore=tests/channels/test_discord_live.py
+          --ignore=tests/integration/
+          --cov=src/openclaw --cov-report=term-missing
+
+      - name: Integration tests
+        working-directory: openclaw-python
+        run: pytest tests/integration/ -v --tb=short
 
   test-discord-live:
     name: Discord live tests
