@@ -40,6 +40,18 @@ def setup() -> None:
 
 
 @cli.command()
+@click.option("--from", "source", default=None, metavar="PATH",
+              help="Path to existing Hermes config.yaml (auto-detected if omitted)")
+@click.option("--to", "output", default=None, metavar="PATH",
+              help="Output path (default: ~/.claw/config.yaml)")
+def migrate(source: str | None, output: str | None) -> None:
+    """Migrate a Hermes gateway config to OpenClaw format."""
+    from openclaw.migration.hermes import run_migration_wizard
+
+    run_migration_wizard(source=source, output=output)
+
+
+@cli.command()
 @click.option("--config", "-c", default=None, help="Path to config.yaml")
 def status(config: str | None) -> None:
     """Show gateway status and diagnostics."""
