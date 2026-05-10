@@ -24,9 +24,10 @@ def _search_web(query: str, max_results: int = 5) -> str:
 
 def _exec_command(command: str, timeout: int = 30) -> str:
     try:
+        import shlex
         result = subprocess.run(
-            command,
-            shell=True,
+            shlex.split(command),
+            shell=False,
             capture_output=True,
             text=True,
             timeout=timeout,
