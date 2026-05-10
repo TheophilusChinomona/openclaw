@@ -1,0 +1,81 @@
+name: CI
+
+on:
+  push:
+    branches: [main, "claude/**"]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    name: Test (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install dependencies
+        working-directory: openclaw-python
+        run: pip install -e ".[dev]"
+
+      - name: Lint (ruff)
+        working-directory: openclaw-python
+        run: ruff check src/ tests/
+
+      - name: Format check (ruff)
+        working-directory: openclaw-python
+        run: ruff format --check src/ tests/
+
+      - name: Type check (mypy)
+        working-directory: openclaw-python
+        run: mypy src/
+
+      - name: Unit tests
+        working-directory: openclaw-python
+        run: >
+          pytest tests/ -v --tb=short
+          --ignore=tests/channels/test_discord_live.py
+          --ignore=tests/integration/
+          --cov=src/openclaw --cov-report=term-missing
+
+      - name: Integration tests
+        working-directory: openclaw-python
+        run: pytest tests/integration/ -v --tb=short
+
+  test-discord-live:
+    name: Discord live tests
+    runs-on: ubuntu-latest
+    # Only run when the secret is present — skips gracefully on forks
+    if: ${{ secrets.DISCORD_TEST_TOKEN != '' }}
+    needs: test
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        working-directory: openclaw-python
+        run: pip install -e ".[dev]"
+
+      - name: Discord live tests
+        working-directory: openclaw-python
+        env:
+          DISCORD_TEST_TOKEN: ${{ secrets.DISCORD_TEST_TOKEN }}
+          DISCORD_TEST_BOT_ID: ${{ secrets.DISCORD_TEST_BOT_ID }}
+          DISCORD_TEST_GUILD_ID: ${{ secrets.DISCORD_TEST_GUILD_ID }}
+        run: pytest tests/channels/test_discord_live.py -v --tb=short
