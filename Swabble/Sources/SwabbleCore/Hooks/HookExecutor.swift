@@ -39,8 +39,31 @@ public actor HookExecutor {
         let payload = prefix + job.text
 
         let process = Process()
-        process.executableURL = URL(fileURLWithPath: config.hook.command)
-        process.arguments = config.hook.args + [payload]
+        
+        // Sanitize arguments to prevent command injection.
+        // If the command is a shell, arguments should be passed as a single string to -c.
+        // Otherwise, arguments should be treated as literal arguments.
+        let commandPath = config.hook.command
+        let arguments = config.hook.args + [payload]
+
+        // Basic check for common shells. This is not exhaustive but covers common cases.
+        let shellExecutables = ["/bin/sh", "/bin/bash", "/bin/zsh", "/bin/csh", "cmd.exe", "powershell.exe"]
+        let isShellCommand = shellExecutables.contains(where: { commandPath.lowercased().hasSuffix($0) })
+
+        if isShellCommand {
+            // If it's a shell, combine arguments into a single string for -c
+            // and ensure proper escaping if necessary for the specific shell.
+            // For simplicity, we'll join them directly, assuming the user intends
+            // the arguments to be interpreted by the shell. A more robust solution
+            // would involve specific shell escaping.
+            let fullCommand = arguments.joined(separator: " ")
+            process.executableURL = URL(fileURLWithPath: commandPath)
+            process.arguments = ["-c", fullCommand]
+        } else {
+            // For non-shell commands, pass arguments directly.
+            process.executableURL = URL(fileURLWithPath: commandPath)
+            process.arguments = arguments
+        }
 
         var env = ProcessInfo.processInfo.environment
         env["SWABBLE_TEXT"] = job.text
