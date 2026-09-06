@@ -193,6 +193,28 @@ function buildOpenRouterLiveModel(row: unknown): ModelDefinitionConfig | undefin
   };
 }
 
+/**
+ * Fetch the live OpenRouter catalog for onboarding model selection.
+ * Returns bundled rows only when discovery is unavailable (matching the
+ * advisory-catalog behavior of buildLiveModelProviderConfig).
+ */
+export async function buildOpenRouterCatalogModels(params: {
+  apiKey?: string;
+  discoveryApiKey?: string;
+  baseUrl?: string;
+  request?: ModelProviderConfig["request"];
+  signal?: AbortSignal;
+}): Promise<ModelProviderConfig["models"]> {
+  const provider = await buildOpenrouterLiveProvider({
+    ...(params.apiKey ? { apiKey: params.apiKey } : {}),
+    ...(params.discoveryApiKey ? { discoveryApiKey: params.discoveryApiKey } : {}),
+    ...(params.baseUrl ? { baseUrl: params.baseUrl } : {}),
+    ...(params.request ? { request: params.request } : {}),
+    ...(params.signal ? { signal: params.signal } : {}),
+  });
+  return provider.models;
+}
+
 export async function buildOpenrouterLiveProvider(params: {
   apiKey?: string;
   discoveryApiKey?: string;

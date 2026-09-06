@@ -134,6 +134,38 @@ describe("createProviderApiKeyAuthMethod", () => {
     expect(config?.agents?.defaults?.model).toEqual(expected);
   });
 
+  it("passes the selected default model to config patching", async () => {
+    const applyConfig = vi.fn((cfg, model) => ({
+      ...cfg,
+      agents: { defaults: { model: { primary: model ?? "fallback" } } },
+    }));
+    const method = createProviderApiKeyAuthMethod({
+      providerId: "example",
+      methodId: "api-key",
+      label: "Example",
+      optionKey: "exampleApiKey",
+      flagName: "--example-api-key",
+      envVar: "EXAMPLE_API_KEY",
+      promptMessage: "Example API key",
+      defaultModel: "example/static-model",
+      applyConfig,
+      resolveDefaultModel: async () => "example/picked-model",
+    });
+
+    const result = await method.run({
+      config: {},
+      env: {},
+      opts: { exampleApiKey: "test-token" },
+      prompter: { note: vi.fn() },
+      runtime: { log: vi.fn(), error: vi.fn(), exit: vi.fn() },
+      secretInputMode: "plaintext",
+    } as never);
+
+    expect(applyConfig).toHaveBeenCalledWith({}, "example/picked-model");
+    expect(result.configPatch).toEqual({
+      agents: { defaults: { model: { primary: "example/picked-model" } } },
+    });
+  });
   it("returns a key-scoped default model during interactive auth", async () => {
     const resolveDefaultModel = vi.fn(async () => "example/enabled-model");
     const method = createProviderApiKeyAuthMethod({
@@ -157,7 +189,11 @@ describe("createProviderApiKeyAuthMethod", () => {
       secretInputMode: "plaintext",
     } as never);
 
-    expect(resolveDefaultModel).toHaveBeenCalledWith({ apiKey: "test-token", config: {} });
+    expect(resolveDefaultModel).toHaveBeenCalledWith({
+      apiKey: "test-token",
+      config: {},
+      prompter: expect.objectContaining({ note: expect.any(Function) }),
+    });
     expect(result.defaultModel).toBe("example/enabled-model");
   });
 });

@@ -2,6 +2,7 @@
 import type { ProviderAuthContext } from "openclaw/plugin-sdk/plugin-entry";
 import { describe, expect, it, vi } from "vitest";
 import { createOpenRouterOAuthAuthMethod } from "./oauth.js";
+import { buildOpenRouterCatalogModels } from "./provider-catalog.js";
 
 const OPENROUTER_OAUTH_REDIRECT_URI = "http://localhost:3000/openrouter-oauth/callback";
 type OpenRouterOAuthLoginOptions = NonNullable<
@@ -101,6 +102,7 @@ function createOpenRouterOAuthContext(params: {
   redirectInput?: string;
   openUrl?: (url: string) => Promise<void>;
   signal?: AbortSignal;
+  select?: <T>(prompt: { message: string; options: Array<{ value: T }>; initialValue?: T }) => Promise<T>;
 }) {
   const progress = {
     update: vi.fn((message: string) => params.onProgress?.(message)),
@@ -123,6 +125,7 @@ function createOpenRouterOAuthContext(params: {
       note,
       text,
       progress: vi.fn(() => progress),
+      ...(params.select ? { select: params.select } : {}),
     },
     runtime: {
       log,
@@ -459,5 +462,154 @@ describe("OpenRouter OAuth", () => {
 
   it("exposes stable auth choice metadata", () => {
     expect(createOpenRouterOAuthAuthMethod().wizard?.choiceId).toBe("openrouter-oauth");
+  });
+
+  describe("model picker", () => {
+    const catalogModels = [
+      {
+        id: "openrouter/anthropic/claude-sonnet-4.6",
+        name: "Anthropic: Claude Sonnet 4.6",
+        reasoning: true,
+        input: ["text", "image"],
+        cost: { input: 3, output: 15, cacheRead: 0.3, cacheWrite: 3.75 },
+        contextWindow: 1_000_000,
+        maxTokens: 64_000,
+      },
+      {
+        id: "openrouter/moonshotai/kimi-k2.6",
+        name: "MoonshotAI: Kimi K2.6",
+        reasoning: true,
+        input: ["text", "image"],
+        cost: { input: 0.8, output: 3.5, cacheRead: 0.2, cacheWrite: 0 },
+        contextWindow: 262144,
+        maxTokens: 262144,
+      },
+      {
+        id: "openrouter/vendor-x/obscure-model",
+        name: "Vendor X: Obscure Model",
+        reasoning: false,
+        input: ["text"],
+        cost: { input: 0.2, output: 0.8, cacheRead: 0, cacheWrite: 0 },
+        contextWindow: 128000,
+        maxTokens: 8192,
+      },
+    ] satisfies Awaited<ReturnType<typeof buildOpenRouterCatalogModels>>;
+
+    function selectFirst(options: Array<{ value: string }>) {
+      return options[0]?.value;
+    }
+
+    it("returns the concrete model the user picked from the live catalog", async () => {
+      const fetchCatalog = vi.fn(async () => catalogModels);
+      const select = vi.fn(async (prompt: { options: Array<{ value: string }> }) =>
+        selectFirst(prompt.options),
+      );
+      const { ctx } = createOpenRouterOAuthContext({ isRemote: true, select });
+
+      const result = await loginOpenRouterOAuth(ctx, {
+        createPkce: () => ({ verifier: "verifier-1", challenge: "challenge-1" }),
+        createState: () => "state-1",
+        fetchImpl: vi.fn(async () => jsonResponse({ key: "sk-or-v1-test" })),
+        fetchCatalog,
+      });
+
+      expect(result.defaultModel).toBe("openrouter/anthropic/claude-sonnet-4.6");
+      expect(fetchCatalog).toHaveBeenCalledWith(expect.objectContaining({ apiKey: "sk-or-v1-test" }));
+      expect(select).toHaveBeenCalledWith(
+        expect.objectContaining({ message: "Pick a default OpenRouter model" }),
+      );
+      expect(result.notes.join("\n")).not.toContain("Model picker unavailable");
+    });
+
+    it("opens the full catalog picker after choosing All models", async () => {
+      const fetchCatalog = vi.fn(async () => catalogModels);
+      const select = vi
+        .fn<
+          (prompt: { message: string; options: Array<{ value: string }> }) => Promise<string>
+        >()
+        .mockImplementationOnce(async (prompt) => {
+          const all = prompt.options.find((option) => option.value === "__all__");
+          if (!all) {
+            throw new Error("expected an all-models option");
+          }
+          return all.value;
+        })
+        .mockImplementationOnce(async (prompt) =>
+          // The full-catalog picker lists alphabetically; pick the curated Sonnet row.
+          prompt.options.find((option) =>
+            option.value.includes("claude-sonnet"),
+          )?.value ?? prompt.options[0]?.value ?? "",
+        );
+      const { ctx } = createOpenRouterOAuthContext({ isRemote: true, select });
+
+      const result = await loginOpenRouterOAuth(ctx, {
+        createPkce: () => ({ verifier: "verifier-1", challenge: "challenge-1" }),
+        createState: () => "state-1",
+        fetchImpl: vi.fn(async () => jsonResponse({ key: "sk-or-v1-test" })),
+        fetchCatalog,
+      });
+
+      expect(select).toHaveBeenCalledTimes(2);
+      expect(select).toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({ message: "All OpenRouter models (3)" }),
+      );
+      expect(result.defaultModel).toBe("openrouter/anthropic/claude-sonnet-4.6");
+    });
+
+    it("falls back to openrouter/auto when the catalog fetch fails", async () => {
+      const fetchCatalog = vi.fn(async () => {
+        throw new Error("catalog down");
+      });
+      const { ctx } = createOpenRouterOAuthContext({
+        isRemote: true,
+        select: async () => "openrouter/anthropic/claude-sonnet-4.6",
+      });
+
+      const result = await loginOpenRouterOAuth(ctx, {
+        createPkce: () => ({ verifier: "verifier-1", challenge: "challenge-1" }),
+        createState: () => "state-1",
+        fetchImpl: vi.fn(async () => jsonResponse({ key: "sk-or-v1-test" })),
+        fetchCatalog,
+      });
+
+      expect(result.defaultModel).toBe("openrouter/auto");
+      expect(result.notes.join("\n")).toContain("Model picker unavailable");
+    });
+
+    it("falls back to openrouter/auto when the picker is declined", async () => {
+      const fetchCatalog = vi.fn(async () => catalogModels);
+      const { ctx } = createOpenRouterOAuthContext({
+        isRemote: true,
+        select: async () => {
+          throw new Error("user cancelled");
+        },
+      });
+
+      const result = await loginOpenRouterOAuth(ctx, {
+        createPkce: () => ({ verifier: "verifier-1", challenge: "challenge-1" }),
+        createState: () => "state-1",
+        fetchImpl: vi.fn(async () => jsonResponse({ key: "sk-or-v1-test" })),
+        fetchCatalog,
+      });
+
+      expect(result.defaultModel).toBe("openrouter/auto");
+      expect(result.notes.join("\n")).toContain("Model picker unavailable");
+    });
+
+    it("skips the picker without a select prompter and stays on openrouter/auto", async () => {
+      const fetchCatalog = vi.fn(async () => catalogModels);
+      const { ctx } = createOpenRouterOAuthContext({ isRemote: true });
+
+      const result = await loginOpenRouterOAuth(ctx, {
+        createPkce: () => ({ verifier: "verifier-1", challenge: "challenge-1" }),
+        createState: () => "state-1",
+        fetchImpl: vi.fn(async () => jsonResponse({ key: "sk-or-v1-test" })),
+        fetchCatalog,
+      });
+
+      expect(result.defaultModel).toBe("openrouter/auto");
+      expect(fetchCatalog).not.toHaveBeenCalled();
+    });
   });
 });
