@@ -15,7 +15,80 @@ import {
   readResponseTextLimited,
 } from "openclaw/plugin-sdk/provider-http";
 import { isRecord, normalizeOptionalString } from "openclaw/plugin-sdk/string-coerce-runtime";
-import { applyOpenrouterConfig, OPENROUTER_DEFAULT_MODEL_REF } from "./onboard.js";
+import {
+  buildOpenRouterAllModelsOptions,
+  buildOpenRouterModelPickerOptions,
+  collectOpenRouterCatalogEntries,
+  OPENROUTER_AUTO_MODEL_REF,
+} from "./model-selection.js";
+import {
+  applyOpenrouterConfig,
+  applyOpenrouterConfigForModel,
+  OPENROUTER_DEFAULT_MODEL_REF,
+} from "./onboard.js";
+import { buildOpenRouterCatalogModels } from "./provider-catalog.js";
+
+const OPENROUTER_CATALOG_TIMEOUT_MS = 15_000;
+
+/**
+ * Prompt the signed-in user to pick a concrete default model from the live
+ * OpenRouter catalog. Returns undefined when the environment cannot support
+ * the picker (non-interactive context, no catalog, prompt declined) so the
+ * caller can fall back to the previous default without failing setup.
+ */
+export async function promptForOpenRouterDefaultModel(params: {
+  apiKey: string;
+  prompter?: ProviderAuthContext["prompter"];
+  signal?: AbortSignal;
+  fetchCatalog?: typeof buildOpenRouterCatalogModels;
+}): Promise<{ modelRef: string; catalogSize: number } | undefined> {
+  const { prompter } = params;
+  // Non-interactive or minimal prompters (tests, hosted flows) skip silently.
+  if (typeof prompter?.select !== "function") {
+    return undefined;
+  }
+  let models: Awaited<ReturnType<typeof buildOpenRouterCatalogModels>>;
+  try {
+    models = await (params.fetchCatalog ?? buildOpenRouterCatalogModels)({
+      apiKey: params.apiKey,
+      signal: params.signal
+        ? AbortSignal.any([params.signal, AbortSignal.timeout(OPENROUTER_CATALOG_TIMEOUT_MS)])
+        : AbortSignal.timeout(OPENROUTER_CATALOG_TIMEOUT_MS),
+    });
+  } catch {
+    return undefined;
+  }
+  const entries = collectOpenRouterCatalogEntries(models ?? []);
+  if (entries.length === 0) {
+    return undefined;
+  }
+  const options = buildOpenRouterModelPickerOptions(entries);
+  let choice: string;
+  try {
+    choice = await prompter.select({
+      message: "Pick a default OpenRouter model",
+      options,
+      initialValue: options[0]?.value,
+    });
+  } catch {
+    return undefined;
+  }
+  if (choice === "__all__") {
+    const allOptions = buildOpenRouterAllModelsOptions(entries);
+    try {
+      choice = await prompter.select({
+        message: `All OpenRouter models (${entries.length})`,
+        options: allOptions,
+      });
+    } catch {
+      return undefined;
+    }
+  }
+  if (!choice || choice === "__all__") {
+    return undefined;
+  }
+  return { modelRef: choice, catalogSize: entries.length };
+}
 
 const PROVIDER_ID = "openrouter";
 const OPENROUTER_OAUTH_METHOD_ID = "oauth";
@@ -55,6 +128,8 @@ type OpenRouterOAuthLoginOptions = {
   createState?: () => string;
   fetchImpl?: typeof fetch;
   startCallback?: typeof startProviderOAuthLoopbackCallbackServer;
+  /** Test seam: override live catalog fetching for the model picker. */
+  fetchCatalog?: typeof buildOpenRouterCatalogModels;
 };
 
 function extractOpenRouterError(value: unknown): string | undefined {
@@ -350,6 +425,28 @@ async function loginOpenRouterOAuth(
     });
     progress.stop("OpenRouter OAuth complete");
 
+    // Model selection: prefer a concrete model picked from the live catalog;
+    // fall back to the legacy `openrouter/auto` default whenever the picker
+    // cannot run (non-interactive context, catalog fetch failed, declined).
+    let defaultModel = OPENROUTER_DEFAULT_MODEL_REF;
+    const notes = [
+      "OpenRouter OAuth issued an OpenRouter API key and stored it in the default OpenRouter auth profile.",
+      "Re-run OpenRouter OAuth to rotate that key or use the API-key setup path for a key you manage manually.",
+    ];
+    const selection = await promptForOpenRouterDefaultModel({
+      apiKey: token.key,
+      prompter: ctx.prompter,
+      ...(ctx.signal ? { signal: ctx.signal } : {}),
+      ...(options.fetchCatalog ? { fetchCatalog: options.fetchCatalog } : {}),
+    }).catch(() => undefined);
+    if (selection && selection.modelRef !== OPENROUTER_AUTO_MODEL_REF) {
+      defaultModel = selection.modelRef;
+    } else if (!selection) {
+      notes.push(
+        `Model picker unavailable; defaulting to ${OPENROUTER_AUTO_MODEL_REF}. Set a concrete model later with: openclaw models set openrouter/<provider>/<model>`,
+      );
+    }
+
     const metadata = {
       authFlow: "oauth-pkce",
       ...(token.userId ? { userId: token.userId } : {}),
@@ -361,12 +458,9 @@ async function loginOpenRouterOAuth(
 
     return {
       profiles: [{ profileId: OPENROUTER_OAUTH_PROFILE_ID, credential }],
-      configPatch: applyOpenrouterConfig(ctx.config),
-      defaultModel: OPENROUTER_DEFAULT_MODEL_REF,
-      notes: [
-        "OpenRouter OAuth issued an OpenRouter API key and stored it in the default OpenRouter auth profile.",
-        "Re-run OpenRouter OAuth to rotate that key or use the API-key setup path for a key you manage manually.",
-      ],
+      configPatch: applyOpenrouterConfigForModel(ctx.config, defaultModel),
+      defaultModel,
+      notes,
     };
   } catch (err) {
     progress.stop("OpenRouter OAuth failed");

@@ -7,6 +7,7 @@ import type { SecretInput } from "../config/types.secrets.js";
 import { createLazyRuntimeSurface } from "../shared/lazy-runtime.js";
 import { normalizeOptionalSecretInput } from "../utils/normalize-secret-input.js";
 import type {
+  ProviderAuthContext,
   ProviderAuthMethod,
   ProviderAuthMethodNonInteractiveContext,
   ProviderPluginWizardSetup,
@@ -35,10 +36,11 @@ type ProviderApiKeyAuthMethodOptions = {
   metadata?: Record<string, string>;
   noteMessage?: string;
   noteTitle?: string;
-  applyConfig?: (cfg: OpenClawConfig) => OpenClawConfig;
+  applyConfig?: (cfg: OpenClawConfig, defaultModel?: string) => OpenClawConfig;
   resolveDefaultModel?: (params: {
     apiKey: string;
     config: OpenClawConfig;
+    prompter?: ProviderAuthContext["prompter"];
     signal?: AbortSignal;
   }) => Promise<string | undefined>;
 };
@@ -70,7 +72,12 @@ function resolveProfileIds(params: {
 
 async function resolveDefaultModel(
   params: ProviderApiKeyAuthMethodOptions,
-  context: { apiKey: string; config: OpenClawConfig; signal?: AbortSignal },
+  context: {
+    apiKey: string;
+    config: OpenClawConfig;
+    prompter?: ProviderAuthContext["prompter"];
+    signal?: AbortSignal;
+  },
 ): Promise<string | undefined> {
   if (!params.resolveDefaultModel) {
     return params.defaultModel;
@@ -91,7 +98,7 @@ async function applyApiKeyConfig(params: {
   profileIds: string[];
   defaultModel?: string;
   preserveExistingPrimary?: boolean;
-  applyConfig?: (cfg: OpenClawConfig) => OpenClawConfig;
+  applyConfig?: (cfg: OpenClawConfig, defaultModel?: string) => OpenClawConfig;
 }) {
   const { applyAuthProfileConfig, applyPrimaryModel } = await loadProviderApiKeyAuthRuntime();
   let next = params.ctx.config;
@@ -103,7 +110,7 @@ async function applyApiKeyConfig(params: {
     });
   }
   if (params.applyConfig) {
-    next = params.applyConfig(next);
+    next = params.applyConfig(next, params.defaultModel);
   }
   if (!params.defaultModel) {
     return next;
@@ -189,6 +196,7 @@ export function createProviderApiKeyAuthMethod(
       const defaultModel = await resolveDefaultModel(params, {
         apiKey,
         config: ctx.config,
+        prompter: ctx.prompter,
         ...(ctx.signal ? { signal: ctx.signal } : {}),
       });
 
@@ -207,7 +215,9 @@ export function createProviderApiKeyAuthMethod(
               : undefined,
           ),
         })),
-        ...(params.applyConfig ? { configPatch: params.applyConfig(ctx.config) } : {}),
+        ...(params.applyConfig
+          ? { configPatch: params.applyConfig(ctx.config, defaultModel) }
+          : {}),
         ...(defaultModel ? { defaultModel } : {}),
       };
     },
