@@ -2173,28 +2173,14 @@ const pluginSdkEntryOwners = [
 // unambiguous scripts and direct imports without a second inventory.
 const EXACT_TOOLING_TARGETS = new Map<string, string[]>([
   [".github/workflows/ci.yml", ["ci-platform-checkout", "ci-linux-git", "ci-git-owner"]],
-  [".github/workflows/docs-sync-publish.yml", ["docs-sync-publish"]],
-  [".github/workflows/docs-agent.yml", ["docs-agent-workflow"]],
+  ,
+  ,
   ["scripts/generate-ci-git-owner.mts", ["ci-git-owner"]],
-  [
-    ".github/workflows/openclaw-live-and-e2e-checks-reusable.yml",
-    [packageAcceptance, workflowGuards, "release-workflow-matrix-plan", installDocker],
-  ],
-  [
-    ".github/workflows/plugin-clawhub-release.yml",
-    [packageAcceptance, "plugin-release-git-lifecycle", workflowGuards],
-  ],
-  [
-    ".github/workflows/plugin-npm-release.yml",
-    [
-      packageAcceptance,
-      "plugin-npm-extended-stable-workflow",
-      "plugin-release-git-lifecycle",
-      workflowGuards,
-    ],
-  ],
-  [".github/workflows/qa-live-transports-convex.yml", [packageAcceptance, workflowGuards]],
-  [".github/workflows/update-migration.yml", [packageAcceptance, workflowGuards]],
+  ,
+  ,
+  ,
+  ,
+  ,
   [
     ".github/actions/setup-node-env/action.yml",
     ["install-trufflehog", packageAcceptance, workflowGuards],

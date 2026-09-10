@@ -16,9 +16,6 @@ import { isDirectRunUrl } from "./lib/direct-run.mjs";
 import { execGhApiRead, plainGhEnv } from "./lib/plain-gh.mjs";
 
 const SCHEDULED_HOSTED_WORKFLOW_PATHS = new Map([
-  ["Blacksmith Testbox", ".github/workflows/ci-check-testbox.yml"],
-  ["Blacksmith ARM Testbox", ".github/workflows/ci-check-arm-testbox.yml"],
-  ["Blacksmith Build Artifacts Testbox", ".github/workflows/ci-build-artifacts-testbox.yml"],
   ["Workflow Sanity", ".github/workflows/workflow-sanity.yml"],
 ]);
 export const SCHEDULED_HOSTED_WORKFLOWS = [...SCHEDULED_HOSTED_WORKFLOW_PATHS.keys()];

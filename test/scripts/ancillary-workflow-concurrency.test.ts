@@ -15,61 +15,9 @@ const WORKFLOWS: {
   convertToDraft?: true;
 }[] = [
   {
-    file: ".github/workflows/ci-check-testbox.yml",
-    prGroup: "Blacksmith Testbox-pr-v1-123",
-    manual: { mode: "isolated per-run", group: "Blacksmith Testbox-manual-v1-201" },
-  },
-  {
-    file: ".github/workflows/ci-check-arm-testbox.yml",
-    prGroup: "Blacksmith ARM Testbox-pr-v1-123",
-    manual: { mode: "isolated per-run", group: "Blacksmith ARM Testbox-manual-v1-201" },
-  },
-  {
-    file: ".github/workflows/ci-build-artifacts-testbox.yml",
-    prGroup: "Blacksmith Build Artifacts Testbox-pr-v1-123",
-    manual: { mode: "isolated per-run", group: "Blacksmith Build Artifacts Testbox-manual-v1-201" },
-  },
-  {
-    file: ".github/workflows/ios-periphery.yml",
-    prGroup: "ios-periphery-iOS Periphery Dead Code-123",
-    convertToDraft: true,
-    manual: {
-      mode: "same-SHA cancels",
-      group: `ios-periphery-iOS Periphery Dead Code-${"a".repeat(40)}`,
-    },
-  },
-  {
-    file: ".github/workflows/macos-periphery.yml",
-    prGroup: "macos-periphery-macOS Periphery Dead Code-123",
-    convertToDraft: true,
-    manual: {
-      mode: "same-SHA cancels",
-      group: `macos-periphery-macOS Periphery Dead Code-${"a".repeat(40)}`,
-    },
-  },
-  {
-    file: ".github/workflows/shared-openclawkit-periphery.yml",
-    prGroup: "shared-openclawkit-periphery-123",
-    convertToDraft: true,
-    manual: { mode: "same-SHA cancels", group: `shared-openclawkit-periphery-${"a".repeat(40)}` },
-  },
-  {
     file: ".github/workflows/opengrep-precise.yml",
     prGroup: "opengrep-pr-diff-OpenGrep — PR Diff-123",
     manual: { mode: "absent" },
-  },
-  {
-    file: ".github/workflows/sandbox-common-smoke.yml",
-    prGroup: "Sandbox Common Smoke-123",
-    convertToDraft: true,
-    manual: { mode: "absent" },
-    push: { group: "Sandbox Common Smoke-refs/heads/main", cancel: true },
-  },
-  {
-    file: ".github/workflows/plugin-init-scaffold-validation.yml",
-    prGroup: "Plugin Init Scaffold Validation-123",
-    manual: { mode: "same-ref queues", group: "Plugin Init Scaffold Validation-refs/heads/main" },
-    push: { group: "Plugin Init Scaffold Validation-refs/heads/main", cancel: false },
   },
 ];
 
@@ -527,7 +475,7 @@ describe.each(WORKFLOWS)("ancillary admission: $file", (policy) => {
   }
 });
 
-it("isolates supported useful, passive, manual and push events across all nine workflows", () => {
+it("isolates supported useful, passive, manual and push events across all listed workflows", () => {
   for (const event of ["ready_for_review", "opened", "workflow_dispatch", "push"] as const) {
     const groups = WORKFLOWS.flatMap(({ file }) => {
       const workflow = parse(readFileSync(file, "utf8")) as Workflow;

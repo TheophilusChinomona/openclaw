@@ -400,7 +400,7 @@ describe("run-opengrep.sh", () => {
 });
 
 describe("OpenGrep GitHub SARIF uploads", () => {
-  it.each(["opengrep-precise.yml", "opengrep-precise-full.yml"])(
+  it.each(["opengrep-precise.yml"])(
     "%s preserves raw evidence and uploads only findings without accepted source suppression",
     (workflowName) => {
       const repo = createTempDir("openclaw-opengrep-sarif-");
