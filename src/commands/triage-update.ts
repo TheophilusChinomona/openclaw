@@ -20,7 +20,7 @@ const updateIdentitySchema = z.object({
   sha: z.string().nullish(),
   version: z.string().nullish(),
 });
-const updateFailureSchema = z
+export const updateFailureSchema = z
   .union([
     z.object({
       result: z.object({
@@ -38,7 +38,15 @@ const updateFailureSchema = z
             stderrTail: z.string().nullish(),
             termination: z.enum(["exit", "timeout", "no-output-timeout", "signal"]).optional(),
             advisory: z
-              .object({ kind: z.literal("package-post-install-doctor"), message: z.string() })
+              .object({
+                kind: z.enum([
+                  "package-post-install-doctor",
+                  "candidate-runtime-unavailable",
+                  "recoverable-maintenance",
+                ]),
+                message: z.string(),
+                details: z.array(z.string()).optional(),
+              })
               .optional(),
           }),
         ),
@@ -287,7 +295,10 @@ export function sanitizeTriageUpdateFailure(
         name: text(step.name, 64),
         exitCode: step.exitCode,
         termination: step.termination,
-        stderrTail: text(step.stderrTail, 160, "tail"),
+        // Failed-step stderr leads with the triggering error: keep both ends. The 384-byte cap's
+        // tail half is wider than the previous tail-only window, so previously visible excerpts
+        // remain visible; stdout keeps its tail-only outcome excerpt.
+        stderrTail: text(step.stderrTail, 384, "ends"),
         stdoutTail: text(step.stdoutTail, 160, "tail"),
       })),
     },

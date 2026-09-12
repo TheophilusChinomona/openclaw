@@ -120,15 +120,11 @@ async function callGatewayMessageAction<T>(params: {
       ? Math.min(gateway.timeoutMs, MESSAGE_ACTION_INITIAL_SEND_TIMEOUT_MAX_MS)
       : gateway.timeoutMs;
   const call = {
-    url: gateway.url,
-    token: gateway.token,
+    ...gateway,
     method: "message.action",
     params: params.actionParams,
     timeoutMs,
     signal: params.abortSignal,
-    clientName: gateway.clientName,
-    clientDisplayName: gateway.clientDisplayName,
-    mode: gateway.mode,
     agentRuntimeIdentityToken: params.agentRuntimeIdentityToken,
   };
   try {
@@ -202,7 +198,7 @@ export function projectGatewayQueuedDeliveryResult(error: unknown) {
   return {
     status: "delivery_queued",
     delivered: false as const,
-    message: `Message not delivered: ${error.message}. The gateway queued it and will retry automatically. Do not resend it.`,
+    message: `Delivery is pending: ${error.message}. The gateway owns retry or reconciliation; delivery is not yet confirmed. Do not resend it.`,
   };
 }
 

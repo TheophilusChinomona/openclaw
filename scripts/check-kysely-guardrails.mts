@@ -77,7 +77,7 @@ const rawSqliteAllowPathGroups = {
     "src/transcripts/sqlite-schema.ts",
     "src/state/sqlite-schema-shape.test-support.ts",
   ],
-  "cross-process SQLite coordination locks": ["src/infra/device-identity-coordinator.ts"],
+  "cross-process SQLite coordination locks": ["src/infra/sqlite-coordinator.ts"],
   "backup snapshot maintenance": [
     "src/commands/backup-verify.ts",
     "src/infra/backup-create.ts",
@@ -127,6 +127,8 @@ const rawSqliteAllowPathGroups = {
     "src/infra/state-migrations.media-persistence.ts",
     "src/infra/state-migrations.transcript-directives-archives.ts",
     "src/infra/state-migrations.transcript-directives.ts",
+    // Doctor integrity PRAGMAs and lossless native 64-bit orphan-row preservation.
+    "src/state/openclaw-state-db-task-delivery-recovery.ts",
   ],
   "session entry cache connection-local validity counters": [
     "src/config/sessions/session-accessor.sqlite-entry-cache.ts",
@@ -144,7 +146,7 @@ const rawSqliteAllowPathGroups = {
     "src/plugin-state/plugin-state-store.sqlite.ts",
     "src/proxy-capture/store.sqlite.ts",
     "src/tasks/task-flow-registry.store.sqlite.ts",
-    "src/tasks/task-registry.store.sqlite.ts",
+    "src/tasks/task-registry.store.kernel.ts",
   ],
 };
 

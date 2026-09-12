@@ -6,10 +6,8 @@ import path from "node:path";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import { listExtensionTestFilesForRoots } from "../../scripts/lib/extension-test-plan.mts";
 import { readTestSelectorSourceFacts } from "../../scripts/lib/test-selector-source-facts.mts";
-import {
-  resolveVitestPretestBuildMode,
-  resolveVitestRuntimeCliSelections,
-} from "../../scripts/lib/vitest-build-prerequisites.mts";
+import { resolveVitestPretestBuildMode } from "../../scripts/lib/vitest-build-prerequisites.mts";
+import { resolveVitestRuntimeCliSelections } from "../../scripts/lib/vitest-runtime-selection.mts";
 import { resolveShardTimingKey } from "../../scripts/lib/vitest-shard-metadata.mts";
 import {
   CHANNEL_CONTRACT_CONFIG_PATTERNS,
@@ -55,7 +53,15 @@ describe("test runtime prerequisites", () => {
   it.each([
     ["lifecycle file", ["extensions/qa-lab/src/suite-process-lifecycle.test.ts"], "private-qa"],
     ["QA directory", ["extensions/qa-lab"], "private-qa"],
+    ["tooling config", ["test/vitest/vitest.tooling.config.ts"], "private-qa"],
     ["QA config", ["test/vitest/vitest.extension-qa.config.ts"], "private-qa"],
+    [
+      "sticker provider runtime",
+      ["extensions/telegram/src/sticker-cache.selection.test.ts"],
+      "runtime",
+    ],
+    ["Telegram config", ["test/vitest/vitest.extension-telegram.config.ts"], "runtime"],
+    ["ordinary Telegram test", ["extensions/telegram/src/sequential-key.test.ts"], undefined],
     ["all plugins", ["extensions"], "private-qa"],
     ["full local suite", [], "private-qa"],
     ["root config", ["vitest.config.ts"], "private-qa"],
@@ -66,6 +72,95 @@ describe("test runtime prerequisites", () => {
     ],
     ["ACP CLI process", ["src/cli/acp-cli-exit.process.test.ts"], "runtime"],
     ["update CLI process", ["src/cli/update-dry-run-state.process.test.ts"], "runtime"],
+    ["migrated update process", ["src/cli/update-cli/update-command-migrated.test.ts"], "runtime"],
+    ["update rollback", ["src/cli/update-cli/update-command-rollback.test.ts"], "runtime"],
+    [
+      "update recovery",
+      ["src/cli/update-cli/update-command-post-update-recovery.test.ts"],
+      "runtime",
+    ],
+    ["update repair", ["src/cli/update-cli/update-command-post-update-repair.test.ts"], "runtime"],
+    [
+      "update service recovery",
+      ["src/cli/update-cli/update-command-service.integration.test.ts"],
+      "runtime",
+    ],
+    [
+      "candidate Gateway canary",
+      ["src/infra/update-candidate-canary.integration.test.ts"],
+      "runtime",
+    ],
+    ["infra config", ["test/vitest/vitest.infra.config.ts"], "runtime"],
+    ["native SDK generation", ["src/plugins/plugin-module-generation.sdk.test.ts"], "runtime"],
+    ["config startup SDK", ["src/config/config-startup-corpus.test.ts"], "runtime"],
+    ["state startup SDK", ["src/config/state-startup-corpus.test.ts"], "runtime"],
+    ["runtime config project", ["test/vitest/vitest.runtime-config.config.ts"], "runtime"],
+    [
+      "context engine sandbox SDK",
+      ["src/agents/runtime-plugins.context-engine.integration.test.ts"],
+      "runtime",
+    ],
+    ["native direct loader SDK", ["src/plugins/loader.test.ts"], "runtime"],
+    ["native setup registry SDK", ["src/plugins/setup-registry.migrations.test.ts"], "runtime"],
+    ["native source checkout SDK", ["src/plugins/source-checkout-runtime.test.ts"], "runtime"],
+    ["native provider contract SDK", ["extensions/deepinfra/provider.contract.test.ts"], "runtime"],
+    ["native catalog auth SDK", ["test/openai-model-discovery-auth-order.test.ts"], "runtime"],
+    ["models.list native catalog", ["test/plugins/codex-model-catalog.gateway.test.ts"], "runtime"],
+    ["native package setup SDK", ["test/plugin-npm-runtime-build.test.ts"], "runtime"],
+    ["native Linux node SDK", ["src/node-host/linux-node-plugin.integration.test.ts"], "runtime"],
+    [
+      "native catalog worker SDK",
+      ["src/agents/prepared-model-catalog-worker.integration.test.ts"],
+      "runtime",
+    ],
+    [
+      "native Google Meet SDK",
+      ["extensions/google-meet/src/transports/chrome-startup.test.ts"],
+      "runtime",
+    ],
+    [
+      "native channel directory config SDK",
+      ["src/channels/plugins/contracts/directory.registry-backed-shard-b.contract.test.ts"],
+      "runtime",
+    ],
+    [
+      "native channel directory session SDK",
+      ["src/channels/plugins/contracts/directory.registry-backed-shard-d.contract.test.ts"],
+      "runtime",
+    ],
+    [
+      "native channel surfaces session SDK",
+      ["src/channels/plugins/contracts/surfaces-only.registry-backed-shard-d.contract.test.ts"],
+      "runtime",
+    ],
+    [
+      "native channel shape SDK",
+      ["src/channels/plugins/contracts/plugin-shape.contract.test.ts"],
+      "private-qa",
+    ],
+    [
+      "native SDK companion lifecycle",
+      ["src/plugin-sdk/channel-entry-contract.lifecycle.test.ts"],
+      "runtime",
+    ],
+    [
+      "native completion transport SDK",
+      ["src/agents/simple-completion-runtime.plugin-scope.test.ts"],
+      "runtime",
+    ],
+    ["agent core config", ["test/vitest/vitest.agents-core.config.ts"], "runtime"],
+    ["agent umbrella config", ["test/vitest/vitest.agents.config.ts"], "runtime"],
+    ["ordinary completion unit", ["src/agents/simple-completion-runtime.test.ts"], undefined],
+    [
+      "direct completion fixture without SDK imports",
+      ["src/plugins/runtime/runtime-llm.prepared-owner.test.ts"],
+      undefined,
+    ],
+    ["native inspection fixture", ["src/plugins/status.runtime-inspection.test.ts"], undefined],
+    ["source module generation", ["src/plugins/plugin-module-generation.test.ts"], undefined],
+    ["native module interop", ["src/plugins/plugin-module-generation.interop.test.ts"], undefined],
+    ["plugins config", ["test/vitest/vitest.plugins.config.ts"], "runtime"],
+    ["ordinary update unit test", ["src/infra/update-candidate-canary.test.ts"], undefined],
     ["CLI directory", ["src/cli"], "runtime"],
     ["CLI config", ["test/vitest/vitest.cli.config.ts"], undefined],
     ["CLI process config", ["test/vitest/vitest.cli-process.config.ts"], "runtime"],
@@ -88,6 +183,11 @@ describe("test runtime prerequisites", () => {
       "Doctor source module probe",
       ["src/commands/doctor-config-preflight.pristine.process.test.ts"],
       undefined,
+    ],
+    [
+      "Codex delivery Gateway",
+      ["test/e2e/qa-lab/runtime/gateway-codex-delivery-cache.test.ts"],
+      "private-qa",
     ],
     ["Active Memory Gateway", ["src/gateway/gateway-active-memory.test.ts"], "runtime"],
     ["concurrent Gateway streams", ["src/gateway/gateway-concurrent-streams.test.ts"], "runtime"],
@@ -138,6 +238,44 @@ describe("test runtime prerequisites", () => {
   });
 
   it.each([
+    ["bundled", ["src/plugins/loader.test.ts"], undefined],
+    ["unit-fast", ["src/plugins/*.test.ts"], undefined],
+    ["contracts-channel-config", ["src/channels/plugins/contracts/**"], undefined],
+    ["contracts-channel-session", ["src/channels/plugins/contracts/**"], undefined],
+    ["contracts-channel-registry", ["src/channels/plugins/contracts/**"], undefined],
+    ["unit", ["src/node-host/**"], undefined],
+    ["unit-src", ["src/node-host/**"], undefined],
+    ["extensions", ["deepinfra/**"], "runtime"],
+    ["extensions", ["deepinfra/**", "google-meet/**"], undefined],
+    ["tooling", ["test/**"], undefined],
+    ["plugins", ["plugin-module-generation.sdk.test.ts"], undefined],
+    ["runtime-config", ["config/config-startup-corpus.test.ts"], "runtime"],
+    ["runtime-config", ["config/state-startup-corpus.test.ts"], "runtime"],
+    [
+      "runtime-config",
+      ["config/config-startup-corpus.test.ts", "config/state-startup-corpus.test.ts"],
+      undefined,
+    ],
+    ["agents-core", ["simple-completion-runtime.plugin-scope.test.ts"], "runtime"],
+    ["agents", ["simple-completion-runtime.plugin-scope.test.ts"], "runtime"],
+    [
+      "agents-core",
+      [
+        "simple-completion-runtime.plugin-scope.test.ts",
+        "prepared-model-catalog-worker.integration.test.ts",
+        "runtime-plugins.context-engine.integration.test.ts",
+      ],
+      undefined,
+    ],
+    [
+      "agents",
+      [
+        "simple-completion-runtime.plugin-scope.test.ts",
+        "prepared-model-catalog-worker.integration.test.ts",
+        "runtime-plugins.context-engine.integration.test.ts",
+      ],
+      undefined,
+    ],
     ["gateway-core", ["gateway-*.test.ts"], undefined],
     ["gateway-server", ["server-sidecar-retention.test.ts"], "runtime"],
     ["gateway-server", ["server.config-patch.test.ts"], "runtime"],
@@ -148,6 +286,8 @@ describe("test runtime prerequisites", () => {
     ],
     ["gateway", ["gateway-*.test.ts"], "runtime"],
     ["gateway", ["server*.test.ts"], "runtime"],
+    ["tooling", ["**/gateway-codex-delivery-cache.test.ts"], "runtime"],
+    ["extension-telegram", ["**/sticker-cache.selection.test.ts"], undefined],
   ] as const)("keeps %s selection scoped after excluding %s", (project, exclude, expected) => {
     const selections = resolveVitestRuntimeCliSelections(
       `test/vitest/vitest.${project}.config.ts`,
@@ -155,6 +295,22 @@ describe("test runtime prerequisites", () => {
       {},
     );
     expect(resolveVitestPretestBuildMode(selections)).toBe(expected);
+  });
+
+  it("projects invocation-owned include files when selecting prerequisites", () => {
+    const selections = resolveVitestRuntimeCliSelections(
+      "test/vitest/vitest.gateway-server.config.ts",
+      ["run"],
+      {},
+    );
+    for (const selection of selections) {
+      selection.includePatterns = ["src/gateway/server-request-context.test.ts"];
+    }
+    expect(resolveVitestPretestBuildMode(selections)).toBeUndefined();
+    for (const selection of selections) {
+      selection.includePatterns = ["src/gateway/server-sidecar-retention.test.ts"];
+    }
+    expect(resolveVitestPretestBuildMode(selections)).toBe("runtime");
   });
 
   it("combines private QA and runtime readers into one private build", () => {
@@ -411,8 +567,7 @@ describe("scripts/test-projects changed-target routing", () => {
   });
 
   it.each([
-    "src/system-agent/setup-inference-persist.ts",
-    "src/agents/embedded-agent-runner/run/attempt-dispatch-preparation.ts",
+    "src/system-agent/setup-inference-turn.ts",
     "src/agents/embedded-agent-runner/run/run-attempt-dispatch.ts",
   ])(
     "routes setup inference transcript ownership changes through both regressions for %s",
@@ -491,7 +646,11 @@ describe("scripts/test-projects changed-target routing", () => {
     (scriptPath) => {
       expectChangedTargets(
         [scriptPath],
-        ["test/scripts/direct-run-entrypoints.test.ts", "test/scripts/lint-status.test.ts"],
+        [
+          "test/scripts/direct-run-entrypoints.test.ts",
+          "test/scripts/lint-status.test.ts",
+          "test/scripts/local-check-runtime.test.ts",
+        ],
       );
     },
   );
@@ -744,6 +903,10 @@ describe("scripts/test-projects changed-target routing", () => {
     expectChangedTargets(["scripts/run-with-env.mts"], ["test/scripts/run-with-env.test.ts"]);
   });
 
+  it("keeps Crabbox config edits on package acceptance tests", () => {
+    expectChangedTargets([".crabbox.yaml"], ["test/scripts/package-acceptance-workflow.test.ts"]);
+  });
+
   it("keeps scripts tsconfig edits on oxlint config tests", () => {
     expectChangedTargets(["scripts/tsconfig.json"], ["test/scripts/oxlint-config.test.ts"]);
   });
@@ -810,6 +973,32 @@ describe("scripts/test-projects changed-target routing", () => {
     }
   });
 
+  it("keeps Crabbox gate trust-boundary scripts on their owner tests", () => {
+    expectChangedTargets(
+      ["scripts/pr-lib/crabbox-gate-contract.mjs"],
+      [
+        "test/scripts/pr-crabbox-gate-publisher.test.ts",
+        "test/scripts/pr-crabbox-merge-bypass.test.ts",
+      ],
+    );
+    expectChangedTargets(
+      ["scripts/pr-lib/crabbox-gate-plan.mts"],
+      [
+        "test/scripts/pr-crabbox-gate-plan.test.ts",
+        "test/scripts/pr-crabbox-gate-publisher.test.ts",
+        "test/scripts/pr-prepare-gates.test.ts",
+      ],
+    );
+    expectChangedTargets(
+      ["scripts/pr-lib/crabbox-merge-bypass.sh"],
+      [
+        "test/scripts/pr-crabbox-merge-bypass.test.ts",
+        "test/scripts/pr-merge.test.ts",
+        "test/scripts/pr-merge-outcome.test.ts",
+      ],
+    );
+  });
+
   it("keeps build stamp script edits on the build stamp regression test", () => {
     expectChangedTargets(["scripts/build-stamp.mts"], ["src/infra/build-stamp.test.ts"]);
   });
@@ -833,6 +1022,234 @@ describe("scripts/test-projects changed-target routing", () => {
       mode: "targets",
       targets: expect.arrayContaining(["test/scripts/ci-git-owner.test.ts"]),
     });
+  });
+
+  it("routes QA Profile Evidence through Git lifecycle and existing workflow owners", () => {
+    const plan = resolveChangedTestTargetPlan([".github/workflows/qa-profile-evidence.yml"]);
+    expect(plan).toEqual({
+      mode: "targets",
+      targets: [
+        "test/scripts/ci-git-owner.test.ts",
+        "test/scripts/ci-linux-git.test.ts",
+        "test/scripts/ci-platform-checkout.test.ts",
+        "src/scripts/ci-changed-scope.git-owner.test.ts",
+        "test/scripts/ci-workflow-guards.test.ts",
+      ],
+    });
+    for (const target of ["ci-git-owner", "ci-linux-git", "ci-platform-checkout"]) {
+      expectSingleVitestRunPlan(buildVitestRunPlans([`test/scripts/${target}.test.ts`]), {
+        config: "test/vitest/vitest.tooling.config.ts",
+        includePatterns: [`test/scripts/${target}.test.ts`],
+      });
+    }
+  });
+
+  it.each([
+    [
+      ".github/workflows/linux-app-release.yml",
+      ["test/scripts/release-workflow-git-lifecycle.test.ts"],
+    ],
+    [
+      ".github/workflows/macos-release.yml",
+      [
+        "test/scripts/release-workflow-git-lifecycle.test.ts",
+        "test/scripts/package-acceptance-workflow.test.ts",
+      ],
+    ],
+    [
+      ".github/workflows/npm-placeholder-bootstrap.yml",
+      [
+        "test/scripts/release-workflow-git-lifecycle.test.ts",
+        "test/scripts/npm-placeholder-publication.test.ts",
+      ],
+    ],
+  ])("routes simple release admission lifecycle and semantic proof for %s", (source, semantic) => {
+    const plan = resolveChangedTestTargetPlan([source]);
+    expect(plan).toEqual({
+      mode: "targets",
+      targets: expect.arrayContaining([
+        "test/scripts/ci-git-owner.test.ts",
+        "test/scripts/ci-linux-git.test.ts",
+        "test/scripts/ci-platform-checkout.test.ts",
+        "test/scripts/ci-workflow-guards.test.ts",
+        ...semantic,
+      ]),
+    });
+  });
+
+  it("keeps CI workflow edits on workflow guard tests", () => {
+    expectChangedTargets(
+      [".github/workflows/ci.yml"],
+      [
+        "test/scripts/ci-platform-checkout.test.ts",
+        "test/scripts/ci-linux-git.test.ts",
+        "test/scripts/ci-git-owner.test.ts",
+        "test/scripts/ci-workflow-guards.test.ts",
+        "test/scripts/changed-lanes.test.ts",
+        "test/scripts/check-workflows.test.ts",
+        "test/scripts/plugin-contract-test-plan.test.ts",
+        "test/scripts/plugin-prerelease-test-plan.test.ts",
+        "test/scripts/verify-pr-hosted-gates.test.ts",
+        "src/scripts/ci-changed-scope.control-ui.test.ts",
+        "src/scripts/ci-changed-scope.test.ts",
+        "test/scripts/authorized-beta-focused-evidence.test.ts",
+        "test/scripts/changed-path-facts.test.ts",
+        "test/scripts/ci-changed-node-test-plan.test.ts",
+        "test/scripts/ci-chrome-mcp-prewarm.test.ts",
+        "test/scripts/ci-security-fast-workflow.test.ts",
+        "test/scripts/docker-release-artifacts.test.ts",
+        "test/scripts/full-release-artifacts.test.ts",
+        "test/scripts/full-release-validation-state.test.ts",
+        "test/scripts/ios-lifecycle-workflow.test.ts",
+        "test/scripts/macos-native-test-launch.test.ts",
+        "test/scripts/npm-prepared-bundle.test.ts",
+        "test/scripts/openclaw-npm-extended-stable-release.test.ts",
+        "test/scripts/openclaw-npm-resume-run.test.ts",
+        "test/scripts/package-acceptance-workflow.test.ts",
+        "test/scripts/pr-crabbox-merge-bypass.test.ts",
+        "test/scripts/release-tooling-identity.test.ts",
+        "test/scripts/validate-release-publish-approval.test.ts",
+      ],
+    );
+  });
+
+  it("keeps full release validation workflow edits on FRV contract tests", () => {
+    expectChangedTargets(
+      [".github/workflows/full-release-validation.yml"],
+      [
+        "src/dockerfile.test.ts",
+        "test/scripts/full-release-validation-state.test.ts",
+        "test/scripts/full-release-validation-at-sha.test.ts",
+        "test/scripts/full-release-candidate-reuse.test.ts",
+        "test/scripts/find-reusable-release-validation.test.ts",
+        "test/scripts/openclaw-npm-extended-stable-full-validation-workflow.test.ts",
+        "test/scripts/release-no-push-workflow.test.ts",
+        "test/scripts/release-ci-summary.test.ts",
+        "test/scripts/package-acceptance-workflow.test.ts",
+        "test/scripts/plugin-prerelease-test-plan.test.ts",
+        "test/scripts/check-workflows.test.ts",
+        "test/scripts/ci-workflow-guards.test.ts",
+        "test/scripts/docker-release-artifacts.test.ts",
+        "test/scripts/frv-proof-broker.test.ts",
+        "test/scripts/frv.test.ts",
+        "test/scripts/full-release-artifact-contract.test.ts",
+        "test/scripts/full-release-artifacts.test.ts",
+        "test/scripts/full-release-validation-continuation-workflow.test.ts",
+        "test/scripts/npm-prepared-bundle.test.ts",
+        "test/scripts/openclaw-npm-extended-stable-release.test.ts",
+        "test/scripts/openclaw-performance-workflow.test.ts",
+        "test/scripts/release-plan-producer.test.ts",
+        "test/scripts/release-tooling-identity.test.ts",
+        "test/scripts/validate-full-release-validation-evidence.test.ts",
+      ],
+    );
+  });
+
+  it.each([
+    "scripts/full-release-candidate-reuse.mjs",
+    "scripts/lib/full-release-candidate-reuse.mjs",
+    "scripts/lib/full-release-candidate-reuse.d.mts",
+  ])("routes candidate reuse library changes through the owner test for %s", (changedPath) => {
+    expectChangedTargets([changedPath], ["test/scripts/full-release-candidate-reuse.test.ts"]);
+  });
+
+  it("keeps full release candidate workflow edits on candidate contract tests", () => {
+    expectChangedTargets(
+      [".github/workflows/full-release-candidate.yml"],
+      [
+        "test/scripts/full-release-candidate-reuse.test.ts",
+        "test/scripts/package-acceptance-workflow.test.ts",
+        "test/scripts/check-workflows.test.ts",
+        "test/scripts/ci-workflow-guards.test.ts",
+        "test/scripts/release-no-push-workflow.test.ts",
+      ],
+    );
+  });
+
+  it("unions semantic workflow owners with bounded direct references", () => {
+    withTinyGitRepo(
+      {
+        ".github/workflows/full-release-validation.yml": "name: FRV\n",
+        "test/scripts/full-release-validation-state.test.ts":
+          'const workflow = ".github/workflows/full-release-validation.yml";\n',
+        "test/scripts/unknown-frv-contract.test.ts":
+          'const workflow = ".github/workflows/full-release-validation.yml";\n',
+        "test/scripts/unknown-frv-contract.live.test.ts":
+          'const workflow = ".github/workflows/full-release-validation.yml";\n',
+        "test/scripts/test-projects.test.ts":
+          'const workflow = ".github/workflows/full-release-validation.yml";\n',
+        "test/scripts/workflow-substring.test.ts":
+          'const workflow = ".github/workflows/full-release-validation.yml.bak";\n',
+      },
+      (cwd) => {
+        const targets = resolveChangedTestTargetPlan(
+          [".github/workflows/full-release-validation.yml"],
+          { cwd },
+        ).targets;
+
+        expect(targets).toContain("test/scripts/unknown-frv-contract.test.ts");
+        expect(
+          targets.filter(
+            (target) => target === "test/scripts/full-release-validation-state.test.ts",
+          ),
+        ).toHaveLength(1);
+        expect(targets).not.toContain("test/scripts/unknown-frv-contract.live.test.ts");
+        expect(targets).not.toContain("test/scripts/test-projects.test.ts");
+        expect(targets).not.toContain("test/scripts/workflow-substring.test.ts");
+      },
+    );
+  });
+
+  it.each([
+    {
+      changedPath: ".github/workflows/plugin-npm-release.yml",
+      exactTargets: [
+        "test/scripts/plugin-npm-extended-stable-workflow.test.ts",
+        "test/scripts/plugin-release-git-lifecycle.test.ts",
+      ],
+    },
+    {
+      changedPath: ".github/actions/setup-node-env/action.yml",
+      exactTargets: ["test/scripts/setup-node-env-bun.test.ts"],
+    },
+  ])("unions exact owners and references for $changedPath", ({ changedPath, exactTargets }) => {
+    withTinyGitRepo(
+      {
+        [changedPath]: "name: fixture\n",
+        "test/scripts/direct-workflow-reference.test.ts": `const target = "${changedPath}";\n`,
+      },
+      (cwd) => {
+        const targets = resolveChangedTestTargetPlan([changedPath], { cwd }).targets;
+
+        for (const exactTarget of exactTargets) {
+          expect(targets).toContain(exactTarget);
+        }
+        expect(targets).toContain("test/scripts/direct-workflow-reference.test.ts");
+        expect(targets).toContain("test/scripts/ci-workflow-guards.test.ts");
+      },
+    );
+  });
+
+  it("routes the Bun image consumer to its executable action regression", () => {
+    expectChangedTargets(
+      [".github/actions/setup-node-env/seed-bun-from-image.mjs"],
+      ["test/scripts/setup-node-env-bun.test.ts"],
+    );
+  });
+
+  it("routes ClawHub publication through lifecycle and release workflow proof", () => {
+    expect(
+      resolveChangedTestTargetPlan([".github/workflows/plugin-clawhub-release.yml"]).targets,
+    ).toEqual(
+      expect.arrayContaining([
+        "test/scripts/ci-git-owner.test.ts",
+        "test/scripts/ci-linux-git.test.ts",
+        "test/scripts/ci-platform-checkout.test.ts",
+        "test/scripts/ci-workflow-guards.test.ts",
+        "test/scripts/package-acceptance-workflow.test.ts",
+        "test/scripts/plugin-release-git-lifecycle.test.ts",
+      ]),
+    );
   });
 
   it.each(["scripts/write-plugin-sdk-entry-dts.ts", "scripts/lib/local-check-runtime.mts"])(
@@ -860,6 +1277,89 @@ describe("scripts/test-projects changed-target routing", () => {
     );
   });
 
+  it("keeps npm release workflow edits on the preflight cache guard", () => {
+    expectChangedTargets(
+      [".github/workflows/openclaw-npm-release.yml"],
+      [
+        "test/openclaw-npm-postpublish-verify.test.ts",
+        "test/scripts/openclaw-npm-extended-stable-workflow.test.ts",
+        "test/scripts/package-acceptance-workflow.test.ts",
+        "test/scripts/authorized-beta-focused-evidence.test.ts",
+        "test/scripts/frv.test.ts",
+        "test/scripts/npm-prepared-bundle.test.ts",
+        "test/scripts/openclaw-npm-resume-run.test.ts",
+        "test/scripts/release-candidate-checklist.test.ts",
+        "test/scripts/verify-stable-main-closeout.test.ts",
+        "test/scripts/ci-workflow-guards.test.ts",
+      ],
+    );
+  });
+
+  it.each([
+    {
+      workflowPath: ".github/workflows/docker-release.yml",
+      targets: [
+        "src/dockerfile.test.ts",
+        "test/scripts/docker-channel-promote.test.ts",
+        "test/scripts/docker-release-artifacts.test.ts",
+        "test/scripts/vercel-container-registry-publish.test.ts",
+        "test/scripts/authorized-beta-focused-evidence.test.ts",
+        "test/scripts/ci-workflow-guards.test.ts",
+        "test/scripts/release-no-push-workflow.test.ts",
+        "test/scripts/release-plan-producer.test.ts",
+      ],
+    },
+    {
+      workflowPath: ".github/workflows/openclaw-release-publish.yml",
+      targets: [
+        "test/scripts/package-acceptance-workflow.test.ts",
+        "test/scripts/docker-release-artifacts.test.ts",
+        "test/scripts/vercel-container-registry-publish.test.ts",
+        "test/scripts/authorized-beta-focused-evidence.test.ts",
+        "test/scripts/clawhub-parent-authorization.test.ts",
+        "test/scripts/clawhub-postpublish.test.ts",
+        "test/scripts/frv.test.ts",
+        "test/scripts/openclaw-release-ready.test.ts",
+        "test/scripts/plugin-npm-extended-stable-workflow.test.ts",
+        "test/scripts/release-beta-verifier.test.ts",
+        "test/scripts/release-candidate-checklist.test.ts",
+        "test/scripts/release-no-push-workflow.test.ts",
+        "test/scripts/release-plan-producer.test.ts",
+        "test/scripts/release-publish-draft.test.ts",
+        "test/scripts/release-tooling-bootstrap.test.ts",
+        "test/scripts/validate-release-publish-approval.test.ts",
+        "test/scripts/ci-workflow-guards.test.ts",
+      ],
+    },
+    {
+      workflowPath: ".github/workflows/vercel-container-registry-publish.yml",
+      targets: [
+        "test/scripts/docker-channel-promote.test.ts",
+        "test/scripts/release-plan-producer.test.ts",
+        "test/scripts/vercel-container-registry-publish.test.ts",
+        "test/scripts/ci-workflow-guards.test.ts",
+      ],
+    },
+  ])(
+    "routes release workflow edits through their owning regression tests for $workflowPath",
+    ({ workflowPath, targets }) => {
+      expectChangedTargets([workflowPath], targets);
+    },
+  );
+
+  it("selects OCI publication proof for read-only Docker preparation changes", () => {
+    const plan = resolveChangedTestTargetPlan([".github/workflows/docker-release-prepare.yml"]);
+    expect(plan.mode).toBe("targets");
+    expect(plan.targets).toEqual(
+      expect.arrayContaining([
+        "src/dockerfile.test.ts",
+        "test/scripts/docker-release-artifacts.test.ts",
+        "test/scripts/release-no-push-workflow.test.ts",
+        "test/scripts/ci-workflow-guards.test.ts",
+      ]),
+    );
+  });
+
   it("keeps generated locale publisher and inventory edits on workflow guards", () => {
     for (const actionPath of [
       ".github/actions/create-generated-pr-tokens/action.yml",
@@ -884,6 +1384,129 @@ describe("scripts/test-projects changed-target routing", () => {
     );
   });
 
+  it("keeps PR automation workflow edits on workflow guard tests", () => {
+    for (const workflowPath of [
+      ".github/workflows/auto-response.yml",
+      ".github/workflows/labeler.yml",
+      ".github/workflows/real-behavior-proof.yml",
+      ".github/workflows/stale.yml",
+    ]) {
+      expectChangedTargets(
+        [workflowPath],
+        workflowPath === ".github/workflows/labeler.yml"
+          ? [
+              "test/scripts/ci-workflow-guards.test.ts",
+              "test/scripts/ci-changed-node-test-plan.test.ts",
+              "test/scripts/labeler-label-cap.test.ts",
+            ]
+          : ["test/scripts/ci-workflow-guards.test.ts"],
+      );
+    }
+    expectChangedTargets(
+      [".github/workflows/clawsweeper-dispatch.yml"],
+      ["test/scripts/ci-workflow-guards.test.ts", "test/scripts/clawsweeper-dispatch.test.ts"],
+    );
+  });
+
+  it("keeps security-sensitive guard workflow edits on guard workflow tests", () => {
+    expectChangedTargets(
+      [".github/workflows/security-sensitive-guard.yml"],
+      [
+        "test/scripts/security-sensitive-guard-workflow.test.ts",
+        "test/scripts/ci-workflow-guards.test.ts",
+      ],
+    );
+  });
+
+  it("keeps Crabbox and Testbox workflow edits on workflow regression tests", () => {
+    const workflowTargets = new Map([
+      [
+        ".github/workflows/ci-check-testbox.yml",
+        [
+          "test/scripts/ci-workflow-guards.test.ts",
+          "test/scripts/package-acceptance-workflow.test.ts",
+          "test/scripts/changed-lanes.test.ts",
+          "test/scripts/ancillary-workflow-concurrency.test.ts",
+          "test/scripts/pr-prepare-gates.test.ts",
+          "test/scripts/testbox-base.test.ts",
+          "test/scripts/testbox-lease-freshness.test.ts",
+        ],
+      ],
+      [
+        ".github/workflows/ci-check-arm-testbox.yml",
+        [
+          "test/scripts/ci-workflow-guards.test.ts",
+          "test/scripts/package-acceptance-workflow.test.ts",
+          "test/scripts/ancillary-workflow-concurrency.test.ts",
+          "test/scripts/testbox-base.test.ts",
+        ],
+      ],
+      [
+        ".github/workflows/ci-build-artifacts-testbox.yml",
+        [
+          "test/scripts/package-acceptance-workflow.test.ts",
+          "test/scripts/ci-workflow-guards.test.ts",
+          "test/scripts/ancillary-workflow-concurrency.test.ts",
+          "test/scripts/testbox-base.test.ts",
+        ],
+      ],
+      [
+        ".github/workflows/crabbox-hydrate.yml",
+        [
+          "test/scripts/ci-workflow-guards.test.ts",
+          "test/scripts/package-acceptance-workflow.test.ts",
+          "test/scripts/setup-pnpm-store-cache-image.test.ts",
+        ],
+      ],
+    ]);
+    for (const [workflowPath, targets] of workflowTargets) {
+      expect(resolveChangedTestTargetPlan([workflowPath])).toEqual({
+        mode: "targets",
+        targets,
+      });
+    }
+  });
+
+  it("routes Periphery workflow edits through their scope regression tests", () => {
+    const workflowTargets = new Map([
+      [
+        ".github/workflows/ios-periphery.yml",
+        [
+          "test/scripts/ancillary-workflow-concurrency.test.ts",
+          "test/scripts/ci-workflow-guards.test.ts",
+          "test/scripts/ios-periphery-comment-workflow.test.ts",
+          "test/scripts/periphery-scope-workflows.test.ts",
+        ],
+      ],
+      [
+        ".github/workflows/macos-periphery.yml",
+        [
+          "test/scripts/ancillary-workflow-concurrency.test.ts",
+          "test/scripts/ci-workflow-guards.test.ts",
+          "test/scripts/ios-periphery-comment-workflow.test.ts",
+          "test/scripts/periphery-scope-workflows.test.ts",
+        ],
+      ],
+      [
+        ".github/workflows/shared-openclawkit-periphery.yml",
+        [
+          "test/scripts/ancillary-workflow-concurrency.test.ts",
+          "test/scripts/ci-workflow-guards.test.ts",
+          "test/scripts/ios-periphery-comment-workflow.test.ts",
+          "test/scripts/periphery-intersection.test.ts",
+          "test/scripts/periphery-scope-workflows.test.ts",
+        ],
+      ],
+    ]);
+
+    for (const [workflowPath, targets] of workflowTargets) {
+      expect(resolveChangedTestTargetPlan([workflowPath]), workflowPath).toEqual({
+        mode: "targets",
+        targets,
+      });
+    }
+  });
+
   it.each([
     ["docs-sync-publish", "docs-sync-publish"],
     ["docs-agent", "docs-agent-workflow"],
@@ -897,10 +1520,70 @@ describe("scripts/test-projects changed-target routing", () => {
         "test/scripts/ci-platform-checkout.test.ts",
         "src/scripts/ci-changed-scope.git-owner.test.ts",
         "test/scripts/ci-workflow-guards.test.ts",
+        ...(workflow === "docs-sync-publish" ? ["test/scripts/docs-mirror-freshness.test.ts"] : []),
       ],
     );
     const plans = buildVitestRunPlans(["test/scripts/ci-linux-git.test.ts"]);
     expect(plans.map(({ config }) => config)).toEqual(["test/vitest/vitest.tooling.config.ts"]);
+  });
+
+  it("keeps Mantis proof workflow edits on workflow evidence regression tests", () => {
+    const packageAcceptanceTargets = [
+      "test/scripts/package-acceptance-workflow.test.ts",
+      "test/scripts/ci-workflow-guards.test.ts",
+      "test/scripts/ci-git-owner.test.ts",
+      "test/scripts/ci-linux-git.test.ts",
+      "test/scripts/ci-platform-checkout.test.ts",
+      "src/scripts/ci-changed-scope.git-owner.test.ts",
+    ];
+    const workflowTargets = new Map([
+      [".github/workflows/mantis-discord-smoke.yml", [...packageAcceptanceTargets]],
+      [
+        ".github/actions/mantis-validate-trusted-ref/action.yml",
+        ["test/scripts/mantis-web-ui-chat-proof-workflow.test.ts", ...packageAcceptanceTargets],
+      ],
+      [".github/workflows/mantis-discord-status-reactions.yml", packageAcceptanceTargets],
+      [".github/workflows/mantis-discord-thread-attachment.yml", packageAcceptanceTargets],
+      [".github/workflows/mantis-slack-desktop-smoke.yml", packageAcceptanceTargets],
+      [
+        ".github/workflows/mantis-web-ui-chat-proof.yml",
+        [
+          "test/scripts/mantis-web-ui-chat-proof-workflow.test.ts",
+          ...packageAcceptanceTargets,
+          "test/scripts/mantis-request-proof.test.ts",
+          "test/scripts/mantis-telegram-proof.test.ts",
+        ],
+      ],
+    ]);
+
+    for (const [workflowPath, targets] of workflowTargets) {
+      expect(resolveChangedTestTargetPlan([workflowPath])).toEqual({
+        mode: "targets",
+        targets,
+      });
+    }
+  });
+
+  it("keeps release-check workflow edits on release workflow regression tests", () => {
+    expectChangedTargets(
+      [".github/workflows/openclaw-release-checks.yml"],
+      [
+        "test/scripts/package-acceptance-workflow.test.ts",
+        "test/scripts/openclaw-cross-os-release-checks.test.ts",
+        "test/scripts/plugin-prerelease-test-plan.test.ts",
+        "test/scripts/test-install-sh-docker.test.ts",
+        "test/scripts/authorized-beta-focused-evidence.test.ts",
+        "test/scripts/ci-workflow-guards.test.ts",
+        "test/scripts/install-smoke-no-push-workflow.test.ts",
+        "test/scripts/openclaw-cross-os-release-workflow.test.ts",
+        "test/scripts/openclaw-npm-extended-stable-full-validation-workflow.test.ts",
+        "test/scripts/openclaw-release-telegram-qa-workflow.test.ts",
+        "test/scripts/package-source-preflight.test.ts",
+        "test/scripts/release-ci-summary.test.ts",
+        "test/scripts/release-no-push-workflow.test.ts",
+        "test/scripts/upgrade-survivor-baselines.test.ts",
+      ],
+    );
   });
 
   it("keeps workflow sanity script edits on workflow guard tests", () => {
@@ -924,6 +1607,83 @@ describe("scripts/test-projects changed-target routing", () => {
     expectChangedTargets(
       ["scripts/check-no-conflict-markers.mjs"],
       ["test/scripts/check-no-conflict-markers.test.ts"],
+    );
+  });
+
+  it("keeps CI, dependency, and docs tooling edits on owner tests", () => {
+    const changedScopeTestFamily = fs
+      .readdirSync("src/scripts")
+      .filter((file) => /^ci-changed-scope(?:\.[^/]+)?\.test\.ts$/u.test(file))
+      .map((file) => `src/scripts/${file}`)
+      .toSorted((left, right) => left.localeCompare(right));
+    expectChangedTargets(
+      ["scripts/ci-changed-scope.mjs"],
+      [...changedScopeTestFamily, "test/scripts/control-ui-i18n.test.ts"],
+    );
+
+    expectChangedTargets(
+      ["scripts/check-dependency-pins.mts"],
+      ["test/scripts/check-dependency-pins.test.ts"],
+    );
+
+    expectChangedTargets(
+      ["scripts/dependency-vulnerability-gate.mts"],
+      ["test/scripts/dependency-vulnerability-gate.test.ts"],
+    );
+
+    expectChangedTargets(
+      ["scripts/dependency-changes-report.mts"],
+      ["test/scripts/dependency-changes-report.test.ts"],
+    );
+
+    expectChangedTargets(
+      ["scripts/github/dependency-guard.mjs"],
+      [
+        "test/scripts/dependency-guard-script.test.ts",
+        "test/scripts/dependency-guard-workflow.test.ts",
+      ],
+    );
+
+    expectChangedTargets(
+      ["scripts/github/guard-shared.mjs"],
+      [
+        "test/scripts/dependency-guard-script.test.ts",
+        "test/scripts/dependency-guard-workflow.test.ts",
+        "test/scripts/security-sensitive-guard-script.test.ts",
+        "test/scripts/security-sensitive-guard-workflow.test.ts",
+      ],
+    );
+
+    expectChangedTargets(
+      ["scripts/github/run-openclaw-cross-os-release-checks.sh"],
+      ["test/scripts/openclaw-cross-os-release-workflow.test.ts"],
+    );
+
+    expectChangedTargets(
+      ["scripts/github/security-sensitive-guard.mjs"],
+      [
+        "test/scripts/security-sensitive-guard-script.test.ts",
+        "test/scripts/security-sensitive-guard-workflow.test.ts",
+      ],
+    );
+
+    expectChangedTargets(
+      ["scripts/dependency-ownership-surface-report.mts"],
+      ["test/scripts/dependency-ownership-surface-report.test.ts"],
+    );
+
+    expectChangedTargets(
+      ["scripts/clawtributors-map.json"],
+      ["test/scripts/update-clawtributors.test.ts"],
+    );
+
+    expectChangedTargets(["scripts/docs-list.js"], ["test/scripts/docs-list.test.ts"]);
+
+    expectChangedTargets(["scripts/docs-link-audit.mjs"], ["src/scripts/docs-link-audit.test.ts"]);
+
+    expectChangedTargets(
+      ["scripts/check-changelog-attributions.mts"],
+      ["test/scripts/check-changelog-attributions.test.ts"],
     );
   });
 
@@ -1582,6 +2342,41 @@ describe("scripts/test-projects changed-target routing", () => {
     ]);
   });
 
+  it("routes Docker E2E script targets to their owner tooling tests", () => {
+    const targets = [
+      "scripts/e2e/kitchen-sink-plugin-docker.sh",
+      "scripts/e2e/kitchen-sink-rpc-docker.sh",
+      "scripts/e2e/kitchen-sink-rpc-walk.mts",
+      "scripts/e2e/onboard-docker.sh",
+      "scripts/e2e/lib/plugin-lifecycle-matrix/measure.mjs",
+      "scripts/e2e/plugin-lifecycle-matrix-docker.sh",
+      "scripts/e2e/release-media-memory-docker.sh",
+    ];
+
+    expect(findUnmatchedExplicitTestTargets(targets)).toEqual([]);
+    expect(buildVitestRunPlans(targets, process.cwd())).toEqual([
+      {
+        config: "test/vitest/vitest.tooling-docker.config.ts",
+        forwardedArgs: [],
+        includePatterns: ["test/scripts/docker-build-helper.test.ts"],
+        watchMode: false,
+      },
+      {
+        config: "test/vitest/vitest.tooling.config.ts",
+        forwardedArgs: [],
+        includePatterns: [
+          "test/scripts/plugin-prerelease-test-plan.test.ts",
+          "test/scripts/kitchen-sink-rpc-walk.test.ts",
+          "test/scripts/openclaw-test-state.test.ts",
+          "test/scripts/plugin-lifecycle-measure.test.ts",
+          "test/scripts/docker-e2e-plan.test.ts",
+          "test/scripts/release-media-memory-scenario.test.ts",
+        ],
+        watchMode: false,
+      },
+    ]);
+  });
+
   it("routes changed Parallels process helpers to their owner tooling tests", () => {
     expectSingleVitestRunPlan(
       buildVitestRunPlans(["--changed", "origin/main"], process.cwd(), () => [
@@ -1616,8 +2411,56 @@ describe("scripts/test-projects changed-target routing", () => {
   it("routes mac restart helpers through restart-mac owner tests", () => {
     expectChangedTargets(
       ["scripts/lib/restart-mac-gateway.sh"],
-      ["test/scripts/restart-mac.test.ts"],
+      ["test/scripts/build-and-run-mac.test.ts", "test/scripts/restart-mac.test.ts"],
     );
+  });
+
+  it("routes the shared MCP scenario through its Docker and client owners", () => {
+    expectChangedTargets(
+      ["scripts/e2e/lib/mcp-code-mode/scenario.sh"],
+      [
+        "test/scripts/docker-build-helper.test.ts",
+        "test/scripts/docker-e2e-plan.test.ts",
+        "test/scripts/plugin-prerelease-test-plan.test.ts",
+        "test/scripts/mcp-code-mode-gateway-client.test.ts",
+        "test/scripts/session-log-mentions.test.ts",
+      ],
+    );
+  });
+
+  it("routes MCP and cron Docker E2E script targets instead of skipping changed tests", () => {
+    const targets = [
+      "scripts/e2e/mcp-channels-docker.sh",
+      "test/e2e/qa-lab/runtime/mcp-channels-docker-client.ts",
+      "test/e2e/qa-lab/runtime/mcp-channels.fixture.ts",
+      "test/e2e/qa-lab/runtime/mcp-client-temp-state.fixture.ts",
+      "scripts/e2e/mcp-code-mode-gateway-docker.sh",
+      "scripts/e2e/mcp-code-mode-gateway-live-docker.sh",
+      "scripts/e2e/agent-bundle-mcp-tools-docker.sh",
+      "test/e2e/qa-lab/runtime/agent-bundle-mcp-tools-docker-client.ts",
+      "scripts/mcp-code-mode-gateway-e2e.ts",
+      "scripts/e2e/cron-cli-docker.sh",
+      "scripts/e2e/cron-mcp-cleanup-docker.sh",
+      "scripts/e2e/cron-mcp-cleanup-docker-client.ts",
+    ];
+
+    expect(findUnmatchedExplicitTestTargets(targets)).toEqual([]);
+    expectChangedTargets(targets, [
+      "test/scripts/docker-build-helper.test.ts",
+      "test/scripts/docker-e2e-observability.test.ts",
+      "test/scripts/docker-e2e-plan.test.ts",
+      "test/scripts/plugin-prerelease-test-plan.test.ts",
+      "test/e2e/qa-lab/runtime/mcp-gateway-transport.e2e.test.ts",
+      "test/scripts/cron-mcp-cleanup-docker-client.test.ts",
+      "test/scripts/mcp-code-mode-gateway-client.test.ts",
+      "test/scripts/session-log-mentions.test.ts",
+      "src/agents/agent-bundle-mcp-runtime.test.ts",
+      "src/agents/agent-bundle-mcp-tools.materialize.test.ts",
+      "src/gateway/server.cron.test.ts",
+      "src/gateway/server-methods/agent.test.ts",
+      "src/cron/isolated-agent/run.fast-mode.test.ts",
+      "src/cron/active-jobs-manual-run.test.ts",
+    ]);
   });
 
   it("routes OpenAI image auth Docker E2E script targets instead of skipping changed tests", () => {
@@ -1633,6 +2476,27 @@ describe("scripts/test-projects changed-target routing", () => {
       "test/scripts/openai-image-auth-docker-client.test.ts",
       "extensions/openai/image-generation-provider.test.ts",
       "src/image-generation/openai-compatible-image-provider.test.ts",
+    ]);
+  });
+
+  it("routes package-backed Docker shell targets instead of skipping changed tests", () => {
+    const targets = [
+      "scripts/e2e/codex-media-path-docker.sh",
+      "scripts/e2e/codex-npm-plugin-live-docker.sh",
+      "scripts/e2e/codex-on-demand-docker.sh",
+      "scripts/e2e/live-plugin-tool-docker.sh",
+      "scripts/e2e/plugin-binding-command-escape-docker.sh",
+      "scripts/e2e/qr-import-docker.sh",
+    ];
+
+    expect(findUnmatchedExplicitTestTargets(targets)).toEqual([]);
+    expectChangedTargets(targets, [
+      "test/scripts/docker-build-helper.test.ts",
+      "test/scripts/docker-e2e-plan.test.ts",
+      "test/scripts/codex-media-path-client.test.ts",
+      "test/scripts/package-acceptance-workflow.test.ts",
+      "test/scripts/live-plugin-tool-assertions.test.ts",
+      "test/scripts/plugin-binding-command-escape-docker.test.ts",
     ]);
   });
 
@@ -1658,7 +2522,6 @@ describe("scripts/test-projects changed-target routing", () => {
       "src/system-agent/system-agent.test.ts",
       "src/system-agent/operations.test.ts",
       "src/system-agent/overview.test.ts",
-      "src/system-agent/setup-inference.test.ts",
       "src/system-agent/audit.test.ts",
       "src/system-agent/rescue-policy.test.ts",
       "src/system-agent/rescue-message.test.ts",
@@ -1725,6 +2588,7 @@ describe("scripts/test-projects changed-target routing", () => {
         forwardedArgs: [
           "test/scripts/doctor-config-preflight-plugin-index.built-cli.e2e.test.ts",
           "test/scripts/mcp-channels-seed.built-cli.e2e.test.ts",
+          "test/scripts/node-runtime-recovery.built-cli.e2e.test.ts",
           "test/scripts/sqlite-sessions-transcripts-flip-proof.built-cli.e2e.test.ts",
           "test/scripts/sqlite-sessions-transcripts-flip-proof.e2e.test.ts",
         ],
@@ -1834,6 +2698,11 @@ describe("scripts/test-projects changed-target routing", () => {
   it.each([
     "src/cli/help-exit.process.test.ts",
     "src/cli/update-dry-run-state.process.test.ts",
+    "src/cli/update-cli/update-command-migrated.test.ts",
+    "src/cli/update-cli/update-command-rollback.test.ts",
+    "src/cli/update-cli/update-command-post-update-recovery.test.ts",
+    "src/cli/update-cli/update-command-post-update-repair.test.ts",
+    "src/cli/update-cli/update-command-service.integration.test.ts",
     "src/cli/one-shot-exit.test.ts",
     "src/cli/program/subcli-descriptors.test.ts",
     "src/cli/state-dir-gateway-check.process.test.ts",
@@ -2286,6 +3155,23 @@ describe("scripts/test-projects changed-target routing", () => {
         "unknown/file.txt",
       ]),
     ).toStrictEqual([]);
+  });
+
+  it("fails safe for raw Git paths that explicit-path normalization would rewrite", () => {
+    for (const changedPath of [
+      " scripts/changed-lanes.mts",
+      String.raw`scripts\changed-lanes.mts`,
+    ]) {
+      expect(
+        resolveChangedTestTargetPlanForArgs(
+          ["--changed", "origin/main"],
+          process.cwd(),
+          () => [changedPath],
+          { broad: true },
+        ),
+        changedPath,
+      ).toEqual({ mode: "broad", targets: [] });
+    }
   });
 
   it("keeps unknown root surface skip reasons available to changed-mode callers", () => {
@@ -3179,6 +4065,27 @@ describe("scripts/test-projects changed-target routing", () => {
     });
   });
 
+  it("skips import-graph scans once a diff already needs broad fallback", () => {
+    const readFileSync = vi.spyOn(fs, "readFileSync");
+    const before = readFileSync.mock.calls.length;
+    const plan = resolveChangedTestTargetPlan([
+      ".crabbox.yaml",
+      "scripts/check.mts",
+      "src/gateway/server.impl.ts",
+    ]);
+    const repoSourceReads = readFileSync.mock.calls
+      .slice(before)
+      .filter(([file]) => typeof file === "string" && normalizeRepoPath(file).includes("/src/"));
+    readFileSync.mockRestore();
+
+    expect(plan).toEqual({
+      mode: "targets",
+      skippedBroadFallbackPaths: ["src/gateway/server.impl.ts"],
+      targets: ["test/scripts/package-acceptance-workflow.test.ts", "test/scripts/check.test.ts"],
+    });
+    expect(repoSourceReads).toEqual([]);
+  });
+
   it("keeps broad changed fallback available through explicit env", () => {
     expect(
       resolveChangedTestTargetPlan(["package.json", "src/commands/channels.add.ts"], {
@@ -3290,17 +4197,17 @@ describe("scripts/test-projects changed-target routing", () => {
   });
 
   it.each([
-    "src/gateway/gateway.test.ts",
-    "src/gateway/server.startup-matrix-migration.integration.test.ts",
-    "src/gateway/sessions-history-http.test.ts",
-  ])("routes gateway integration fixture %s to the e2e lane", (target) => {
+    ["src/gateway/gateway.test.ts", "e2e"],
+    ["src/gateway/server.startup-matrix-migration.integration.test.ts", "e2e"],
+    ["src/gateway/sessions-history-http.test.ts", "gateway"],
+  ])("routes gateway integration fixture %s to the %s lane", (target, lane) => {
     const plans = buildVitestRunPlans([target], process.cwd());
 
     expect(plans).toEqual([
       {
-        config: "test/vitest/vitest.e2e.config.ts",
-        forwardedArgs: [target],
-        includePatterns: null,
+        config: `test/vitest/vitest.${lane}.config.ts`,
+        forwardedArgs: lane === "e2e" ? [target] : [],
+        includePatterns: lane === "e2e" ? null : [target],
         watchMode: false,
       },
     ]);
@@ -3437,6 +4344,17 @@ describe("scripts/test-projects full-suite sharding", () => {
     };
 
     expect(orderFullSuiteSpecsForParallelRun([runtime, tooling])).toEqual([tooling, runtime]);
+  });
+
+  it("prices expanded chunk files without enabling include-file filtering", () => {
+    const chunk = {
+      config: "test/vitest/vitest.tooling.config.ts",
+      includePatterns: null,
+      timingTargets: ["test/scripts/vitest-worker-artifacts.test.ts"],
+    };
+    const whole = { config: "test/vitest/vitest.runtime-config.config.ts", includePatterns: null };
+
+    expect(orderFullSuiteSpecsForParallelRun([whole, chunk])).toEqual([chunk, whole]);
   });
 
   it("uses observed selection timings without substituting a whole-config sample", () => {
@@ -3748,6 +4666,10 @@ describe("scripts/test-projects full-suite sharding", () => {
         const toolingPlans = targetedPlans("test/vitest/vitest.tooling.config.ts");
         expect(toolingPlans.length).toBeGreaterThan(1);
         expect(toolingPlans.every((plan) => plan.forwardedArgs.length <= 2)).toBe(true);
+        for (const plan of plans.filter((entry) => entry.forwardedArgs.length > 0)) {
+          expect(plan.timingTargets).toEqual(plan.forwardedArgs);
+          expect(plan.includePatterns).toBeNull();
+        }
       },
     );
   });
@@ -4255,7 +5177,72 @@ describe("scripts/test-projects channel contract lane patterns", () => {
   });
 });
 
+it.each([
+  ".github/workflows/openclaw-performance.yml",
+  "test/scripts/openclaw-performance-workflow.test.ts",
+  "test/scripts/openclaw-performance-workflow.test-support.ts",
+  "test/scripts/openclaw-performance-git-lifecycle.test.ts",
+  "test/scripts/plugin-release-git-lifecycle.test.ts",
+  "test/scripts/release-workflow-git-lifecycle.test.ts",
+  ".github/workflows/plugin-clawhub-release.yml",
+  ".github/workflows/plugin-npm-release.yml",
+  ".github/actions/publish-generated-pr/action.yml",
+  ".github/actions/publish-generated-pr/policy.py",
+  ".github/workflows/maturity-scorecard.yml",
+  "test/scripts/generated-publisher.test-support.ts",
+  "test/scripts/ci-git-owner.test-support.ts",
+  "test/scripts/ci-checkout.test-support.ts",
+  "test/scripts/ci-git-owner.test.ts",
+  "test/scripts/ci-linux-git.test.ts",
+  "test/scripts/ci-platform-checkout.test.ts",
+  "test/scripts/fixtures/ci-platform-checkout.mjs",
+  "test/scripts/ci-windows-process-census.test-support.ts",
+  "test/scripts/fixtures/ci-windows-process-census.mjs",
+  "test/scripts/fixtures/ci-windows-process-census.py",
+])("routes shared Git ownership through all native tooling lanes: %s", (changedPath) => {
+  const plan = resolveChangedTestTargetPlan([changedPath]);
+  expect(plan.mode).toBe("targets");
+  expect(plan.targets).toEqual(
+    expect.arrayContaining([
+      "test/scripts/ci-git-owner.test.ts",
+      "test/scripts/ci-linux-git.test.ts",
+      "test/scripts/ci-platform-checkout.test.ts",
+      "test/scripts/ci-workflow-guards.test.ts",
+    ]),
+  );
+  expect(
+    buildVitestRunPlans(["test/scripts/ci-git-owner.test.ts"]).map(({ config }) => config),
+  ).toEqual(["test/vitest/vitest.tooling.config.ts"]);
+});
+
 // Workflow policy and shared fixture changes must select both semantic and process proof.
+it.each([
+  ".github/workflows/openclaw-performance.yml",
+  "test/scripts/openclaw-performance-workflow.test.ts",
+  "test/scripts/openclaw-performance-workflow.test-support.ts",
+  "test/scripts/openclaw-performance-git-lifecycle.test.ts",
+  "test/scripts/ci-git-owner.test-support.ts",
+  "test/scripts/fixtures/ci-platform-checkout.mjs",
+  "test/scripts/ci-windows-process-census.test-support.ts",
+  "test/scripts/fixtures/ci-windows-process-census.mjs",
+  "test/scripts/fixtures/ci-windows-process-census.py",
+])("routes Performance lifecycle ownership: %s", (changedPath) => {
+  expect(resolveChangedTestTargetPlan([changedPath]).targets).toEqual(
+    expect.arrayContaining([
+      "test/scripts/ci-git-owner.test.ts",
+      "test/scripts/ci-linux-git.test.ts",
+      "test/scripts/ci-platform-checkout.test.ts",
+      "test/scripts/openclaw-performance-workflow.test.ts",
+      "test/scripts/openclaw-performance-git-lifecycle.test.ts",
+      "test/scripts/ci-workflow-guards.test.ts",
+    ]),
+  );
+  expect(
+    buildVitestRunPlans(["test/scripts/openclaw-performance-git-lifecycle.test.ts"]).map(
+      ({ config }) => config,
+    ),
+  ).toEqual(["test/vitest/vitest.tooling.config.ts"]);
+});
 
 it("routes release admission lifecycle ownership through serial native proof", () => {
   expect(

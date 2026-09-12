@@ -38,11 +38,9 @@ import {
 } from "./app-sidebar-session-types.ts";
 import { icons } from "./icons.ts";
 import type { SessionDataController } from "./session-data-controller.ts";
-import {
-  describeSessionTrailingState,
-  renderSessionLeadingState,
-} from "./session-leading-indicator.ts";
+import { describeSessionState, renderSessionLeadingState } from "./session-leading-indicator.ts";
 import type { SessionOrganizerController } from "./session-organizer-controller.ts";
+import type { SessionOwnerOption } from "./session-owner-chip.ts";
 import { renderSessionRowBadges } from "./session-row-badges.ts";
 import { renderSidebarSessionSubtitle } from "./session-row-subtitle.ts";
 import type { SidebarMenusController } from "./sidebar-menus-controller.ts";
@@ -53,7 +51,7 @@ const SIDEBAR_VISIBLE_CHILD_SESSION_LIMIT = 4;
 
 export interface SessionListHost {
   readonly basePath: string;
-  readonly sessionDataContext: Pick<ApplicationContext, "gateway"> | undefined;
+  readonly sessionDataContext: Pick<ApplicationContext, "gateway" | "agentSelection"> | undefined;
   readonly sidebarLiveActivity: boolean;
   readonly sessionsShowPreview: boolean;
   readonly sidebarNarrationLines: ReadonlyMap<string, string>;
@@ -83,6 +81,7 @@ export interface SessionListHost {
     | "sessionDropTarget"
     | "sidebarSectionDropTarget"
     | "sessionListRemovalDrop"
+    | "setSessionsStatusFilter"
   >;
   readonly sidebarMenus: Pick<
     SidebarMenusController,
@@ -99,6 +98,9 @@ export interface SessionListHost {
   >;
   readonly sessionsStatusFilter: SidebarSessionStatusFilter;
   readonly sessionOwnerFilterActive: boolean;
+  readonly sessionOwnerFilterId: string | null;
+  readonly sessionInvolvingMeFilterActive: boolean;
+  readonly sessionOwnerOptions: readonly SessionOwnerOption[];
   readonly sessionOwnershipVisible: boolean;
   readonly onOpenNewSession?: (agentId: string, target?: NewSessionTarget) => void;
   readonly onNavigate?: (
@@ -108,6 +110,7 @@ export interface SessionListHost {
 
   readonly sessionPullRequests: Pick<SessionPullRequestIndicatorsController, "summary">;
   mainSessionRow(): { key: string } | null;
+  setSessionOwnerFilter(ownerId: string | null, involvingMe?: boolean): void;
   isSessionChildrenExpanded(session: SidebarRecentSession): boolean;
   isSessionChildrenFullyShown(sessionKey: string): boolean;
   startSessionDrag(session: SidebarRecentSession): void;
@@ -116,7 +119,11 @@ export interface SessionListHost {
   handleSessionRowClick(event: MouseEvent, session: SidebarRecentSession): void;
   toggleSessionChildren(session: SidebarRecentSession): void;
   toggleSessionPin(session: SidebarRecentSession): void;
-  toggleSessionMenu(session: SidebarRecentSession, trigger: HTMLElement): void;
+  toggleSessionMenu(
+    session: SidebarRecentSession,
+    trigger: HTMLElement,
+    catalogMenu?: CatalogSessionMenuRequest,
+  ): void;
   showMoreChildren(sessionKey: string): void;
   sectionDragOver(event: DragEvent, sectionId: string, group?: string): void;
   sectionDragLeave(event: DragEvent, sectionId: string, group?: string): void;
@@ -225,27 +232,28 @@ export function renderRecentSession(params: {
         gateway.connection.password.trim()),
     ),
   };
-  const { running, leadingIndicator, trailingIndicator, renderedIdentities } =
-    renderSessionLeadingState(
-      session,
-      leadingOwner,
-      ownerAttribution,
-      ownerViewing,
-      channelAvatarAuth,
-    );
-  const trailingDescription = session.isChild
-    ? running && session.unread
-      ? t("sessionsView.unread")
-      : ""
-    : describeSessionTrailingState(session);
+  const { running, leadingIndicator, renderedIdentities } = renderSessionLeadingState(
+    session,
+    leadingOwner,
+    ownerAttribution,
+    ownerViewing,
+    channelAvatarAuth,
+  );
+  const stateDescription = describeSessionState(session);
   const hasTrail = session.isChild && (session.runtimeMs != null || session.startedAt != null);
   const metaId = hasTrail ? sidebarSessionMetaId(session.key) : undefined;
-  const stateId = trailingDescription ? sidebarSessionStateId(session.key) : undefined;
+  const stateId = stateDescription ? sidebarSessionStateId(session.key) : undefined;
   const openMenuFromEvent = (event: MouseEvent | KeyboardEvent) =>
     handleContextMenuEvent(
       event,
       (event.currentTarget as HTMLElement).querySelector("[data-session-menu]"),
-      (trigger, x, y) => host.sidebarMenus.openSessionMenu(session, x, y, trigger),
+      (trigger, x, y) => {
+        if (display?.catalogMenu) {
+          host.openCatalogMenu(display.catalogMenu, x, y, trigger ?? undefined);
+          return;
+        }
+        host.sidebarMenus.openSessionMenu(session, x, y, trigger);
+      },
     );
   const pinLabel = t(session.pinned ? "sessionsView.unpinSession" : "sessionsView.pinSession");
   const menuTooltip = t("chat.sidebar.openSessionMenu");
@@ -303,6 +311,7 @@ export function renderRecentSession(params: {
       session.forkSource
         ? html`<span
             class="sidebar-session-fork-indicator"
+            aria-hidden=${session.isChild ? nothing : "true"}
             role="img"
             aria-label=${t("sessionsView.forkedSession")}
             >${icons.gitFork}</span
@@ -393,6 +402,7 @@ export function renderRecentSession(params: {
                 placementState: session.placementState,
                 placementProviderId: session.placementProviderId,
                 placementProfileId: session.placementProfileId,
+                placementMachine: session.placementMachine,
                 diskSpaceStatus: session.diskSpaceStatus,
                 workspaceConflictCount: session.workspaceConflictCount,
                 outboxAttentionCount: session.outboxAttentionCount,
@@ -404,19 +414,11 @@ export function renderRecentSession(params: {
                 ),
               })}
               ${
-                trailingIndicator === nothing
-                  ? trailingDescription
-                    ? html`<span class="sr-only" id=${stateId}>${trailingDescription}</span>`
-                    : nothing
-                  : html`<span class="session-row-aside">
-                      <span
-                        class="session-row-state"
-                        id=${stateId}
-                        role="img"
-                        aria-label=${trailingDescription}
-                        >${trailingIndicator}</span
-                      >
-                    </span>`
+                stateDescription
+                  ? html`<span class="sr-only" id=${stateId} aria-hidden="true"
+                      >${stateDescription}</span
+                    >`
+                  : nothing
               }
               ${
                 hasTrail
@@ -459,6 +461,11 @@ export function renderRecentSession(params: {
                   : "sessionsView.showChildSessions",
                 { count: String(session.childSessionKeys.length), session: label },
               )}
+              aria-description=${
+                !childrenExpanded && session.runningChildCount > 0
+                  ? t("sessionsView.activeRun")
+                  : nothing
+              }
               @click=${() => host.toggleSessionChildren(session)}
             >
               <span class="sidebar-child-session-toggle__icon" aria-hidden="true"
@@ -477,7 +484,7 @@ export function renderRecentSession(params: {
       <span class="sidebar-recent-session__aside session-row-aside">
         <span class="session-row-actions">
           ${
-            session.isChild
+            !session.pinnable
               ? nothing
               : html`<button
                   class="session-action session-action--pin"
@@ -502,7 +509,7 @@ export function renderRecentSession(params: {
               @click=${(event: MouseEvent) => {
                 event.stopPropagation();
                 const trigger = event.currentTarget as HTMLElement;
-                host.toggleSessionMenu(session, trigger);
+                host.toggleSessionMenu(session, trigger, display?.catalogMenu);
               }}
             >
               ${icons.moreHorizontal}

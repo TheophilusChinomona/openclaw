@@ -2,9 +2,9 @@
 import { createRequire } from "node:module";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import { ensureSqliteLibrarySelected } from "./bun-sqlite-library.js";
 import { formatErrorMessage } from "./errors.js";
 import { isSqliteWalResetSafeVersion } from "./sqlite-runtime-version.js";
-import { isSqliteLockError } from "./sqlite-transaction.js";
 import { installProcessWarningFilter } from "./warning-filter.js";
 
 const require = createRequire(import.meta.url);
@@ -31,18 +31,30 @@ export function resolveNodeSqliteLocation(location: string): string {
   return resolveSqliteFilesystemPath(location);
 }
 
+/** Preserve native Windows path prefixes before adding SQLite URI parameters. */
+function resolveSqliteFileUriPath(pathname: string, platform: NodeJS.Platform): string {
+  if (platform === "win32") {
+    const namespacedPath = path.win32.toNamespacedPath(path.win32.resolve(pathname));
+    // SQLite separates the query before decoding the Windows namespace prefix.
+    return `file:${encodeURIComponent(namespacedPath)}`;
+  }
+  return pathToFileURL(path.resolve(pathname)).href;
+}
+
+/** Open an existing writable database without SQLite's create-if-missing flag. */
+export function resolveExistingSqliteFileUri(
+  pathname: string,
+  platform: NodeJS.Platform = process.platform,
+): string {
+  return `${resolveSqliteFileUriPath(pathname, platform)}?mode=rw`;
+}
+
 /** Build an immutable SQLite URI without losing the Windows long-path namespace. */
 export function resolveImmutableSqliteFileUri(
   pathname: string,
   platform: NodeJS.Platform = process.platform,
 ): string {
-  if (platform === "win32") {
-    const namespacedPath = path.win32.toNamespacedPath(path.win32.resolve(pathname));
-    // SQLite decodes path escapes after separating the query string, so the
-    // encoded \\?\ prefix reaches the Windows VFS without becoming URI syntax.
-    return `file:${encodeURIComponent(namespacedPath)}?mode=ro&immutable=1`;
-  }
-  return `${pathToFileURL(path.resolve(pathname)).href}?mode=ro&immutable=1`;
+  return `${resolveSqliteFileUriPath(pathname, platform)}?mode=ro&immutable=1`;
 }
 
 function assertSqliteWalResetSafeVersion(version: string, nodeVersion: string): void {
@@ -56,7 +68,7 @@ function assertSqliteWalResetSafeVersion(version: string, nodeVersion: string): 
   const wording = isShared ? "uses shared system" : "embeds";
   const remediation = isShared
     ? "Upgrade the system SQLite library to one of those safe versions, or use a Node build embedding a safe version."
-    : "Upgrade to Node 22.22.3+, 24.15.0+, or 25.9.0+ before retrying.";
+    : "Upgrade to Node 24.16.0+ or 26.1.0+ before retrying.";
   throw new Error(
     `OpenClaw requires SQLite 3.51.3+, 3.50.7+ within 3.50.x, or 3.44.6+ within 3.44.x for WAL safety; ` +
       `Node ${nodeVersion} ${wording} SQLite ${version}, which is affected by the upstream WAL-reset ` +
@@ -93,6 +105,9 @@ function assertSafeSqliteRuntime(sqlite: typeof import("node:sqlite")): void {
 export function requireNodeSqlite(): typeof import("node:sqlite") {
   installProcessWarningFilter();
   try {
+    ensureSqliteLibrarySelected();
+    // Bun follow-up: Revalidate close/dispose file release after oven-sh/bun#40005 ships.
+    // Bun 1.4.2 retains native statements after close; node:sqlite exposes no finalizer.
     const sqlite = require("node:sqlite") as typeof import("node:sqlite");
     assertSafeSqliteRuntime(sqlite);
     return sqlite;
@@ -132,48 +147,4 @@ export function readSqliteDataVersion(database: import("node:sqlite").DatabaseSy
     throw new Error("SQLite did not return a numeric PRAGMA data_version");
   }
   return row.data_version;
-}
-
-/** Hold a raw exclusive transaction until release for cross-process coordination. */
-export function tryAcquireExclusiveSqliteCoordinator(
-  location: string,
-  options: { busyTimeoutMs?: number } = {},
-): { release: () => void } | null {
-  const busyTimeoutMs = Math.max(0, Math.trunc(options.busyTimeoutMs ?? 0));
-  const database = openNodeSqliteDatabase(location);
-  try {
-    // Kysely transaction callbacks cannot own a lock beyond their synchronous commit section.
-    // This handle never writes or commits data. Keep the empty database's initial
-    // journal in memory so acquiring a lock does not create filesystem artifacts.
-    database.exec(
-      `PRAGMA busy_timeout = ${busyTimeoutMs}; PRAGMA journal_mode = MEMORY; BEGIN EXCLUSIVE;`,
-    );
-  } catch (error) {
-    database.close();
-    if (isSqliteLockError(error)) {
-      return null;
-    }
-    throw error;
-  }
-  return {
-    release: () => {
-      const errors: unknown[] = [];
-      try {
-        database.exec("ROLLBACK");
-      } catch (error) {
-        errors.push(error);
-      }
-      try {
-        database.close();
-      } catch (error) {
-        errors.push(error);
-      }
-      if (errors.length === 1) {
-        throw errors[0];
-      }
-      if (errors.length > 1) {
-        throw new AggregateError(errors, "SQLite coordinator rollback and close both failed");
-      }
-    },
-  };
 }

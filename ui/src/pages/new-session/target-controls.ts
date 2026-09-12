@@ -69,6 +69,7 @@ export function renderNewSessionPlaceControls({
   requestUpdate: () => void;
 }) {
   const browser = place.browser;
+  const { machineClass, os } = place.cloudSelection;
   const nativeTerminal = catalog.isTarget(data);
   const cloudProfiles = nativeTerminal || !place.isAdmin() ? [] : gateway.cloudProfiles;
   const branches = place.repository.kind === "git" ? place.repository : null;
@@ -85,7 +86,8 @@ export function renderNewSessionPlaceControls({
     environments: place.canWrite() ? gateway.environments : [],
     cloudProfiles,
     cloudProfileId: place.cloudProfileId,
-    machineClass: place.machineClass,
+    machineClass,
+    os,
     deviceId: place.deviceId,
     autoDevice: place.autoDevice,
     devicePlacement: place.devicePlacementRuntime()?.devicePlacement,
@@ -107,6 +109,7 @@ export function renderNewSessionPlaceControls({
     worktreeAvailable: place.worktreeAvailable(),
     headBranch: branches?.headBranch,
     baseRef: place.baseRef,
+    repository: Boolean(place.remoteRepository),
   });
   const gatewayLabel = gateway.gatewayName
     ? t("newSession.gatewayNamed", { name: gateway.gatewayName })
@@ -114,18 +117,19 @@ export function renderNewSessionPlaceControls({
   return html`${
     nativeTerminal
       ? renderNewSessionTerminalHost({
-          hosts: data?.terminalHosts ?? [],
+          hosts: data?.terminalHosts,
           hostId: place.terminalHostId,
           submitting,
-          refreshing: gateway.catalogRetrying,
           onSelect: (hostId) => place.selectTerminalHost(hostId),
-          onRefresh: gateway.handleCatalogRetry,
         })
       : renderWhereChip({
           state: whereState,
+          environmentQuery: browser.environmentQuery,
+          onEnvironmentQueryInput: (query) => browser.changeEnvironmentQuery(query),
           gatewayName: gateway.gatewayName,
           cloudProfileId: place.cloudProfileId,
-          machineClass: place.machineClass,
+          machineClass,
+          os,
           deviceId: place.deviceId,
           autoDevice: place.autoDevice,
           autoPlacementMode: place.modelControl.autoPlacementSelectionMode(),
@@ -139,7 +143,20 @@ export function renderNewSessionPlaceControls({
           ...browser.popoverCallbacks("where"),
           onSelectDevice: (deviceId) => place.selectDevice(deviceId),
           onSelectAutoDevice: () => place.selectDevice("", true),
-          onSelectCloudProfile: (profileId) => place.selectCloudProfile(profileId),
+          onSelectCloudProfile: (profileId, useDefaults) => {
+            if (useDefaults) {
+              place.cloudMachines.applyPending(profileId);
+            }
+            place.selectCloudProfile(profileId);
+          },
+          onSelectCloudOs: (osId) =>
+            place.cloudMachines.selectOs(
+              place.cloudProfileId,
+              osId,
+              cloudProfiles,
+              submitting || pendingPlacement,
+              requestUpdate,
+            ),
           onSelectCloudMachine: (machineId) =>
             place.cloudMachines.select(
               place.cloudProfileId,
@@ -149,6 +166,10 @@ export function renderNewSessionPlaceControls({
               requestUpdate,
             ),
           onConnectMachine,
+          onManageCloudWorkers: () => {
+            browser.close();
+            context?.navigate("cloud-workers");
+          },
         })
   }${
     nativeTerminal && place.terminalOnNode
@@ -182,7 +203,11 @@ export function renderNewSessionPlaceControls({
             ),
           projectAddAvailable:
             !nativeTerminal &&
-            canCallGatewayMethod(context?.gateway.snapshot, "projects.add", "operator.write"),
+            canCallGatewayMethod(
+              context?.gateway.snapshot,
+              place.remotePlacement ? "sessions.create" : "projects.add",
+              "operator.write",
+            ),
           remoteProjects: browser.projectSearchResult?.projects ?? [],
           selectedRemoteProject: browser.remoteProject,
           projectSearchCredentialMissing: browser.projectSearchResult?.credential === "missing",
@@ -212,6 +237,7 @@ export function renderNewSessionPlaceControls({
       ? renderCheckoutChip({
           state: checkoutState,
           remotePlacement: place.remotePlacement,
+          repository: Boolean(place.remoteRepository),
           folderLabel: projectState.label,
           worktree: place.worktree,
           worktreeAvailable: place.worktreeAvailable(),

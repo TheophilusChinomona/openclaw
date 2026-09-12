@@ -13,6 +13,7 @@ import {
 import { decodeWindowsLauncherScript } from "../infra/windows-launcher-encoding.js";
 import "./test-helpers/schtasks-base-mocks.js";
 import type { GatewayServiceRuntime } from "./service-runtime.js";
+import { withGatewayServiceUpdateAuthority } from "./service-update-authority.js";
 
 vi.mock("../infra/windows-encoding.js", async () => {
   const actual = await vi.importActual<typeof import("../infra/windows-encoding.js")>(
@@ -645,7 +646,7 @@ describe("Windows startup fallback", () => {
       expect(sanitizedError.cause).toEqual({ code: "EACCES" });
       expect(sanitizedError).not.toHaveProperty("path");
       expect(sanitizedError.stack).not.toContain(startupEntryPath);
-      await expect(fs.access(startupEntryPath)).resolves.toBeUndefined();
+      await fs.access(startupEntryPath);
     });
   });
 
@@ -659,6 +660,20 @@ describe("Windows startup fallback", () => {
     await withWindowsEnv("openclaw-win-startup-", async ({ env }) => {
       await expect(readWindowsStartupFallbackRuntimeForUpdate(env)).resolves.toBeNull();
       expect(spawnSync).not.toHaveBeenCalled();
+    });
+  });
+
+  it("refuses update-owned Startup fallback before publishing a login item or detached launcher", async () => {
+    await withWindowsEnv("openclaw-win-update-startup-", async ({ env }) => {
+      addMissingTaskInstallResponses([{ code: 5, stdout: "", stderr: "ERROR: Access is denied." }]);
+      await expect(
+        withGatewayServiceUpdateAuthority(
+          () => {},
+          () => installGatewayScheduledTask(env),
+        ),
+      ).rejects.toThrow("startup fallback is unsupported");
+      await expect(fs.stat(resolveStartupEntryPath(env))).rejects.toMatchObject({ code: "ENOENT" });
+      expect(spawn).not.toHaveBeenCalled();
     });
   });
 
@@ -705,7 +720,7 @@ describe("Windows startup fallback", () => {
       expect(startupScript).toContain("WScript.Shell");
       expect(startupScript).toContain("gateway.cmd");
       expect(startupScript).toContain(
-        `WScript.Quit CreateObject("WScript.Shell").Run("""${result.scriptPath}""", 0, True)`,
+        `WScript.Quit shell.Run("""${result.scriptPath}""", 0, True)`,
       );
       expectStartupFallbackSpawn();
     });
@@ -902,7 +917,7 @@ describe("Windows startup fallback", () => {
       expect(spawnSync.mock.calls.some(([command]) => command.endsWith("taskkill.exe"))).toBe(
         false,
       );
-      await expect(fs.access(startupEntryPath)).resolves.toBeUndefined();
+      await fs.access(startupEntryPath);
     });
   });
 
@@ -935,7 +950,7 @@ describe("Windows startup fallback", () => {
       expect(spawnSync.mock.calls.some(([command]) => command.endsWith("taskkill.exe"))).toBe(
         false,
       );
-      await expect(fs.access(startupEntryPath)).resolves.toBeUndefined();
+      await fs.access(startupEntryPath);
     });
   });
 
@@ -1006,7 +1021,7 @@ describe("Windows startup fallback", () => {
       );
 
       expect(killProcessTreeMock).not.toHaveBeenCalled();
-      await expect(fs.access(startupEntryPath)).resolves.toBeUndefined();
+      await fs.access(startupEntryPath);
     });
   });
 
@@ -1057,7 +1072,7 @@ describe("Windows startup fallback", () => {
       );
 
       expect(killProcessTreeMock).not.toHaveBeenCalled();
-      await expect(fs.access(startupEntryPath)).resolves.toBeUndefined();
+      await fs.access(startupEntryPath);
     });
   });
 
@@ -1092,7 +1107,7 @@ describe("Windows startup fallback", () => {
 
       expectGatewayTermination(4242);
       expectStartupFallbackSpawn();
-      await expect(fs.access(startupEntryPath)).resolves.toBeUndefined();
+      await fs.access(startupEntryPath);
     });
   });
 
@@ -1259,7 +1274,7 @@ describe("Windows startup fallback", () => {
       expect(decodeWindowsLauncherScript({ buffer: await fs.readFile(scriptPath) })).toBe(
         scriptBefore,
       );
-      await expect(fs.access(startupEntryPath)).resolves.toBeUndefined();
+      await fs.access(startupEntryPath);
     });
   });
 
@@ -1312,7 +1327,7 @@ describe("Windows startup fallback", () => {
       expect(decodeWindowsLauncherScript({ buffer: await fs.readFile(scriptPath) })).toBe(
         scriptBefore,
       );
-      await expect(fs.access(startupEntryPath)).resolves.toBeUndefined();
+      await fs.access(startupEntryPath);
     });
   });
 
@@ -1354,7 +1369,7 @@ describe("Windows startup fallback", () => {
       expect(decodeWindowsLauncherScript({ buffer: await fs.readFile(scriptPath) })).toBe(
         scriptBefore,
       );
-      await expect(fs.access(startupEntryPath)).resolves.toBeUndefined();
+      await fs.access(startupEntryPath);
     });
   });
 
@@ -1414,7 +1429,7 @@ describe("Windows startup fallback", () => {
       await expect(installGatewayScheduledTask(env)).rejects.toThrow("refusing a direct fallback");
 
       expect(spawn).not.toHaveBeenCalled();
-      await expect(fs.access(startupEntryPath)).resolves.toBeUndefined();
+      await fs.access(startupEntryPath);
     });
   });
 
@@ -1464,7 +1479,7 @@ describe("Windows startup fallback", () => {
       );
 
       expect(spawn).not.toHaveBeenCalled();
-      await expect(fs.access(startupEntryPath)).resolves.toBeUndefined();
+      await fs.access(startupEntryPath);
     });
   });
 
@@ -1528,7 +1543,7 @@ describe("Windows startup fallback", () => {
       await expect(
         installGatewayScheduledTask(env, new PassThrough(), "18789", { status: "running" }),
       ).rejects.toThrow("previously running Windows login item has not exited cleanly");
-      await expect(fs.access(startupEntryPath)).resolves.toBeUndefined();
+      await fs.access(startupEntryPath);
     });
   });
 
@@ -1611,7 +1626,7 @@ describe("Windows startup fallback", () => {
 
       await restartScheduledTask({ env: hiddenEnv, stdout: new PassThrough() });
 
-      await expect(fs.access(startupEntryPath)).resolves.toBeUndefined();
+      await fs.access(startupEntryPath);
     });
   });
 
@@ -1631,7 +1646,7 @@ describe("Windows startup fallback", () => {
       );
 
       expect(spawn).not.toHaveBeenCalled();
-      await expect(fs.access(startupEntryPath)).resolves.toBeUndefined();
+      await fs.access(startupEntryPath);
     });
   });
 
@@ -1651,7 +1666,7 @@ describe("Windows startup fallback", () => {
       ).rejects.toThrow("refusing a direct fallback");
 
       expect(spawn).not.toHaveBeenCalled();
-      await expect(fs.access(startupEntryPath)).resolves.toBeUndefined();
+      await fs.access(startupEntryPath);
     });
   });
 
@@ -1661,7 +1676,7 @@ describe("Windows startup fallback", () => {
 
       await installGatewayScheduledTask(env);
 
-      await expect(fs.access(resolveStartupEntryPath(env))).resolves.toBeUndefined();
+      await fs.access(resolveStartupEntryPath(env));
       expectStartupFallbackSpawn();
     });
   });
@@ -1672,7 +1687,7 @@ describe("Windows startup fallback", () => {
 
       await installGatewayScheduledTask(env);
 
-      await expect(fs.access(resolveStartupEntryPath(env))).resolves.toBeUndefined();
+      await fs.access(resolveStartupEntryPath(env));
       expectStartupFallbackSpawn();
     });
   });
@@ -1685,7 +1700,7 @@ describe("Windows startup fallback", () => {
 
       await installGatewayScheduledTask(env);
 
-      await expect(fs.access(resolveStartupEntryPath(env))).resolves.toBeUndefined();
+      await fs.access(resolveStartupEntryPath(env));
       expectStartupFallbackSpawn();
     });
   });
@@ -1699,7 +1714,7 @@ describe("Windows startup fallback", () => {
 
       await installGatewayScheduledTask(env);
 
-      await expect(fs.access(resolveStartupEntryPath(env))).resolves.toBeUndefined();
+      await fs.access(resolveStartupEntryPath(env));
       expectStartupFallbackSpawn();
     });
   });

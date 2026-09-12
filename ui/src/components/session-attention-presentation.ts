@@ -60,30 +60,11 @@ export function sessionAttentionSubtitle(attention: SidebarSessionAttention): st
   }
 }
 
-export function renderSessionRunSpinner(showTitle = true, queued = false) {
-  const label = t(queued ? "sessionsView.statusQueued" : "sessionsView.activeRun");
-  return html`<span
-    class="session-run-spinner sidebar-recent-session__state${
-      queued ? " session-run-spinner--queued" : ""
-    }"
-    role="img"
-    aria-label=${label}
-    title=${showTitle ? label : nothing}
-  ></span>`;
-}
-
-export function sessionHasRunningWork(session: SidebarRecentSession): boolean {
-  return session.hasActiveRun || session.runningChildCount > 0;
-}
-
-export function renderSessionState(session: SidebarRecentSession, showTitle = true) {
-  if (sessionHasRunningWork(session)) {
-    return renderSessionRunSpinner(showTitle, session.hasActiveRun && session.status === "queued");
-  }
+export function renderSessionIdleState(session: SidebarRecentSession) {
   if (!session.isChild) {
     return session.unread
       ? html`<span
-          class="session-unread-dot sidebar-recent-session__unread"
+          class="session-unread-dot"
           role="img"
           aria-label=${t("sessionsView.unread")}
         ></span>`

@@ -4,6 +4,7 @@ import { defineConfig, type ViteUserConfig } from "vitest/config";
 import {
   intersectIncludePatterns,
   loadPatternListFromEnv,
+  matchesVitestGlob,
   narrowIncludePatternsForCli,
   relativizeScopedPatterns,
 } from "./vitest.pattern-file.ts";
@@ -46,7 +47,7 @@ function includePatternIsFullyExcluded(includePattern: string, excludePattern: s
   const exclude = normalizePathPattern(excludePattern);
   return (
     include === exclude ||
-    path.matchesGlob(include, exclude) ||
+    matchesVitestGlob(include, exclude) ||
     directoryPatternCoversInclude(exclude, include)
   );
 }
@@ -109,6 +110,7 @@ const SCOPED_PROJECT_GROUP_ORDER_BY_NAME = new Map(
     "extension-providers",
     "extension-signal",
     "extension-slack",
+    "extension-database-workers",
     "extension-telegram",
     "extension-voice-call",
     "extension-whatsapp",

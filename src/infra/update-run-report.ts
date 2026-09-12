@@ -1,12 +1,19 @@
 import { sliceUtf16Safe } from "@openclaw/normalization-core/utf16-slice";
 import { UPDATE_RUN_PHASES } from "../../packages/gateway-protocol/src/update-run-vocabulary.js";
+import { UPDATE_INSTALL_SKIP_GUIDANCE } from "../shared/update-outcome.js";
 import { formatDurationPrecise } from "./format-time/format-duration.ts";
 import type { RestartSentinelPayload } from "./restart-sentinel-store.js";
-import { summarizeUpdateStepFailure, type UpdateRunRecord } from "./update-run-record.js";
+import { formatUpdateDoctorConfigWriteRefusal } from "./update-doctor-config.js";
+import {
+  LEGACY_UPDATE_RUN_ADVISORY,
+  LEGACY_UPDATE_RUN_EXPIRED_REASON,
+} from "./update-run-legacy-expiry.js";
+import type { UpdateRunRecord } from "./update-run-record.js";
+import { updateRunStepsFromResultStep, updateRunWarningMessages } from "./update-run-step.js";
 import type { UpdateRunResult } from "./update-runner-types.js";
 
 export type UpdateRunReport = { headline: string; lines: string[]; markdown: string };
-export type UpdateRunNoticeKind = "ack" | "activating" | "verifying" | "finished";
+export type UpdateRunNoticeKind = "ack" | "parking" | "activating" | "verifying" | "finished";
 type ReportInput = Pick<
   UpdateRunRecord,
   | "status"
@@ -30,16 +37,18 @@ export function renderUpdateRunNotice(
   if (kind === "finished") {
     return run.status === "running" ? null : renderUpdateRunReport(run).markdown;
   }
-  if (run.status !== "running" || run.phase !== (kind === "ack" ? "requested" : kind)) {
+  // Managed parking precedes updater staging; its notice must not advance the ledger phase.
+  const noticePhase = kind === "ack" || kind === "parking" ? "requested" : kind;
+  if (run.status !== "running" || run.phase !== noticePhase) {
     return null;
   }
   const from = run.before.version ? bounded(run.before.version, 120) : undefined;
   const target = run.after.version ?? run.target.version;
   const to = target ? bounded(target, 120) : undefined;
   if (kind === "ack") {
-    return `⬆️ Updating OpenClaw ${from ?? "the current version"} → ${to ?? "the latest release"}. You'll get a message here before the gateway restarts and when verification finishes.`;
+    return `⬆️ Updating OpenClaw ${from ?? "the current version"} → ${to ?? "the latest release"}. The gateway stays available while the update is validated; you'll get a message here when it finishes.`;
   }
-  if (kind === "activating") {
+  if (kind === "activating" || kind === "parking") {
     return `⏳ Restarting the gateway now${from && to ? ` (v${from} → v${to})` : ""}…`;
   }
   const running = run.verification.runningVersion
@@ -58,6 +67,9 @@ function recoveryHints(run: ReportInput, nextAction?: string): string[] {
   }
   if (run.status !== "failed") {
     return [];
+  }
+  if (run.reason === LEGACY_UPDATE_RUN_EXPIRED_REASON) {
+    return [LEGACY_UPDATE_RUN_ADVISORY];
   }
   const hints: string[] = [];
   if (run.reason === "preflight-insufficient-space") {
@@ -97,7 +109,7 @@ export function renderUpdateRunReport(
   const after = run.after.sha?.slice(0, 8) ?? run.after.version;
   const reason = bounded(run.reason?.trim() || "unknown reason", 240);
   const running =
-    run.verification.serviceRunning === false ? undefined : run.verification.runningVersion;
+    run.verification.serviceRunning === true ? run.verification.runningVersion : undefined;
   let headline: string;
   switch (run.status) {
     case "succeeded":
@@ -106,7 +118,10 @@ export function renderUpdateRunReport(
         : "✅ OpenClaw updated.";
       break;
     case "failed":
-      headline = `⚠️ OpenClaw update failed: ${reason}.${running ? ` The gateway is running ${running}.` : ""}`;
+      headline =
+        run.reason === LEGACY_UPDATE_RUN_EXPIRED_REASON
+          ? `ℹ️ OpenClaw update abandoned: ${reason}.`
+          : `⚠️ OpenClaw update failed: ${reason}.${running ? ` The gateway is running ${running}.` : ""}`;
       break;
     case "skipped":
       headline = `ℹ️ OpenClaw update skipped: ${reason}.`;
@@ -120,6 +135,23 @@ export function renderUpdateRunReport(
   }
   headline = bounded(headline, 500);
   const lines: string[] = [];
+  for (const step of run.steps) {
+    if (step.configWriteRefusal) {
+      lines.push(formatUpdateDoctorConfigWriteRefusal(step.configWriteRefusal));
+    }
+  }
+  const configChanges = run.steps.flatMap((step) => (step.configChange ? [step.configChange] : []));
+  const configKeys = [
+    ...new Set(configChanges.flatMap((change) => (change.kind === "key" ? [change.key] : []))),
+  ];
+  if (configKeys.length) {
+    lines.push(`Doctor changed config keys: ${configKeys.join(", ")}.`);
+  }
+  for (const message of new Set(
+    configChanges.flatMap((change) => (change.kind === "migration" ? [change.message] : [])),
+  )) {
+    lines.push(`Warning: Doctor migration: ${message}`);
+  }
   const phases = run.steps
     .filter((step) => PHASES.has(step.step))
     .map((step) => {
@@ -135,6 +167,9 @@ export function renderUpdateRunReport(
   for (const step of run.steps.filter((item) => item.status === "failed").slice(-3)) {
     lines.push(bounded(`Failed: ${step.step}${step.detail ? ` — ${step.detail}` : ""}`, 300));
   }
+  for (const message of updateRunWarningMessages(run.steps).slice(-3)) {
+    lines.push(`Warning: ${bounded(message, 500)}`);
+  }
   const verification: string[] = [];
   const facts = run.verification;
   if (facts.booted) {
@@ -149,8 +184,8 @@ export function renderUpdateRunReport(
   if (facts.channelsReady !== undefined) {
     verification.push(facts.channelsReady ? "channels ready" : "channels not ready");
   }
-  if (facts.inferenceProbe) {
-    verification.push(`inference ${facts.inferenceProbe}`);
+  if (facts.readyz !== undefined) {
+    verification.push(facts.readyz ? "HTTP ready" : "HTTP not ready");
   }
   if (facts.pluginErrors?.length) {
     verification.push(`${facts.pluginErrors.length} plugin activation error(s)`);
@@ -169,19 +204,43 @@ export function renderUpdateRunReport(
   if (run.downtimeMs != null) {
     lines.push(`Gateway downtime: ${formatDurationPrecise(run.downtimeMs)}.`);
   }
-  const nextAction = opts.nextAction ?? run.origin.nextAction;
+  const nextAction =
+    opts.nextAction ??
+    run.origin.nextAction ??
+    (run.status === "skipped" &&
+    run.reason &&
+    Object.hasOwn(UPDATE_INSTALL_SKIP_GUIDANCE, run.reason)
+      ? UPDATE_INSTALL_SKIP_GUIDANCE[run.reason]
+      : undefined);
+  const lastRepairReason = run.repair.at(-1)?.reason;
+  const repairStopReason =
+    lastRepairReason === "requester-revoked" || lastRepairReason === "repair-requires-config-change"
+      ? lastRepairReason
+      : run.reason;
+  const repairHint =
+    run.status === "failed" && repairStopReason === "requester-revoked"
+      ? nextAction
+        ? "Repair stopped because the chat requester is no longer a command owner. Further recovery requires a current command owner."
+        : "Repair stopped because the chat requester is no longer a command owner. A current command owner must start a new update, or the operator can run openclaw triage locally."
+      : run.status === "failed" && repairStopReason === "repair-requires-config-change"
+        ? nextAction
+          ? "Doctor could not promote config changes. Review the named keys and writer refusal before continuing recovery."
+          : "Doctor could not promote config changes. Review the named keys and writer refusal, then run openclaw doctor --fix under your own authority, or openclaw triage."
+        : undefined;
   const hints =
     run.status === "running"
       ? recoveryHints(run)
-      : [
-          ...new Set(
-            [
-              opts.doctorHint ?? facts.doctorHint ?? run.origin.doctorHint,
-              ...recoveryHints(run, nextAction),
-              nextAction,
-            ].filter((line): line is string => Boolean(line)),
-          ),
-        ];
+      : repairHint
+        ? [repairHint, ...(nextAction ? [nextAction] : [])]
+        : [
+            ...new Set(
+              [
+                opts.doctorHint ?? facts.doctorHint ?? run.origin.doctorHint,
+                ...recoveryHints(run, nextAction),
+                nextAction,
+              ].filter((line): line is string => Boolean(line)),
+            ),
+          ];
   lines.push(...hints);
   const next = hints.at(-1);
   const body = [headline, ...lines.filter((line) => line !== next)].join("\n");
@@ -201,13 +260,7 @@ export function updateRunReportInputFromResult(result: UpdateRunResult): ReportI
     verification: {},
     repair: [],
     downtimeMs: null,
-    steps: result.steps.map((step) => ({
-      step: step.name,
-      status: step.exitCode === 0 || step.advisory ? "completed" : "failed",
-      ...(step.exitCode !== 0
-        ? { detail: step.advisory?.message ?? summarizeUpdateStepFailure(step) }
-        : {}),
-    })),
+    steps: result.steps.flatMap(updateRunStepsFromResultStep),
   };
 }
 
